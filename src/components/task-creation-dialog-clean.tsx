@@ -1,20 +1,24 @@
 import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Progress } from '@/components/ui/progress'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Textarea } from './ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Checkbox } from './ui/checkbox'
+import { RadioGroup, RadioGroupItem } from './ui/radio-group'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Badge } from './ui/badge'
+import { Calendar } from './ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { Progress } from './ui/progress'
 import { CalendarIcon, Plus, Settings, Users, Clock, Filter, Target, Upload, Database, FileText, CheckCircle, AlertCircle, Download } from 'lucide-react'
 import { format } from 'date-fns'
-import { cn } from '@/lib/utils'
+
+// 简单的 className 合并函数
+function cn(...classes: (string | undefined | null | false)[]): string {
+  return classes.filter(Boolean).join(' ')
+}
 
 interface TaskCreationDialogProps {
   children: React.ReactNode
@@ -44,6 +48,7 @@ export default function TaskCreationDialog({
       // 从编辑任务中初始化表单数据
       setTaskName(editingTask.name || '')
       setTaskDescription(editingTask.description || '')
+      setDataType(editingTask.dataType || 'dialogue')
       
       // 根据编辑任务的配置初始化其他状态
       if (editingTask.config) {
@@ -77,9 +82,12 @@ export default function TaskCreationDialog({
     }
   }, [isEditMode, editingTask])
   
-  // 基本信息
+  // 第一步：任务基本信息
   const [taskName, setTaskName] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
+  const [dataType, setDataType] = useState<'dialogue' | 'text_block' | 'image'>('dialogue') // 标注数据类型
+  
+  // 第二步：数据来源配置
   const [executionType, setExecutionType] = useState<'single' | 'periodic'>('single')
   const [executeImmediately, setExecuteImmediately] = useState(false)
   
@@ -435,13 +443,13 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
     document.body.removeChild(link)
   }
 
-  // 步骤配置
+  // 步骤配置 - 按照需求文档的5步流程
   const steps = [
-    { id: 'basic', title: '基本信息', description: '设置任务名称和执行方式' },
-    { id: 'annotation-types', title: '标注类型', description: '选择标注任务的类型' },
-    { id: 'filter', title: '筛选条件', description: '配置数据筛选和拉取范围' },
-    { id: 'assignment', title: '任务分配', description: '设置标注人员和分配方式' },
-    { id: 'deadline', title: '完成期限', description: '设置任务完成时限' }
+    { id: 'basic', title: '任务基本信息设置', description: '任务名称、标注数据类型、任务描述' },
+    { id: 'data-source', title: '标注数据来源配置', description: '数据来源、任务频率、拉取范围' },
+    { id: 'annotation-types', title: '标注项配置', description: '选择标注类型和标注项目' },
+    { id: 'assignment', title: '任务分配', description: '标注人员选择和分配方式' },
+    { id: 'deadline', title: '时限配置', description: '设置任务完成时限' }
   ]
 
   const nextStep = () => {
@@ -458,24 +466,42 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
 
   const canProceedToNext = () => {
     switch (currentStep) {
-      case 0: // 基本信息
-        if (!taskName) return false
-        if (executionType === 'single' && !executeImmediately && !singleExecutionDate) return false
-        if (executionType === 'periodic') {
-          const { startDate, endDate, weekdays } = periodicConfig
-          if (!startDate || !endDate || weekdays.length === 0) return false
-        }
-        return true
-      case 1: // 标注类型
-        return annotationTypeConfig.selectedTypes.length > 0
-      case 2: // 筛选条件
+      case 0: // 第一步：任务基本信息设置
+        return taskName.trim() !== '' && dataType !== ''
+      case 1: // 第二步：标注数据来源配置
         if (filterConfig.dataSource === 'online') {
-          return filterConfig.onlineConfig.targetDB && filterConfig.onlineConfig.botId
+          // 线上拉取需要配置Bot ID和渠道
+          if (!filterConfig.onlineConfig.botId || !filterConfig.onlineConfig.targetDB) return false
+          // 单次任务需要时间范围
+          if (executionType === 'single') {
+            return filterConfig.onlineConfig.singleTimeRange.startDate && filterConfig.onlineConfig.singleTimeRange.endDate
+          }
+          // 周期任务需要周期配置
+          if (executionType === 'periodic') {
+            return periodicConfig.startDate && periodicConfig.endDate && periodicConfig.weekdays.length > 0
+          }
+          return true
         } else {
+          // 手动导入需要上传成功
           return filterConfig.importConfig.uploadStatus === 'success'
         }
-      case 3: // 任务分配
-        return assignmentConfig.annotators.length > 0
+      case 2: // 第三步：标注项配置
+        return annotationTypeConfig.selectedTypes.length > 0
+      case 3: // 第四步：任务分配
+        if (assignmentConfig.annotators.length === 0) return false
+        // 如果是分散标注且选择定额分配，需要检查配额
+        if (assignmentConfig.annotationType === 'distributed' && assignmentConfig.allocationMethod === 'quota') {
+          const totalQuota = getTotalQuota()
+          const taskQuantity = getTaskQuantity()
+          return totalQuota > 0 && totalQuota <= taskQuantity
+        }
+        return true
+      case 4: // 第五步：时限配置
+        if (assignmentConfig.deadline.type === 'absolute') {
+          return assignmentConfig.deadline.absoluteDate !== undefined
+        } else {
+          return assignmentConfig.deadline.relativeDays > 0 || assignmentConfig.deadline.relativeHours > 0
+        }
       default:
         return true
     }
@@ -823,12 +849,12 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
 
         {/* 步骤内容 */}
         <div className="min-h-[500px]">
-          {/* 基本信息 */}
+          {/* 第一步：任务基本信息设置 */}
           {currentStep === 0 && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">任务基本信息</CardTitle>
+                  <CardTitle className="text-lg">第一步：任务基本信息设置</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -839,15 +865,27 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
                       onChange={(e) => setTaskName(e.target.value)}
                       placeholder="请输入任务名称"
                     />
-                    {executionType === 'periodic' && taskName && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        周期性任务将自动生成：{generateTaskName()}
-                      </p>
-                    )}
                   </div>
 
                   <div>
-                    <Label htmlFor="task-description">任务简介</Label>
+                    <Label>标注数据类型 *</Label>
+                    <Select value={dataType} onValueChange={(value: 'dialogue' | 'text_block' | 'image') => setDataType(value)}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="选择标注数据类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dialogue">对话标注</SelectItem>
+                        <SelectItem value="text_block" disabled>文本块标注（后续规划）</SelectItem>
+                        <SelectItem value="image" disabled>图像标注（后续规划）</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-gray-500 mt-1">
+                      *MVP版本仅支持对话标注，后续将支持多模态数据类型
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="task-description">任务描述（选填）</Label>
                     <Textarea
                       id="task-description"
                       value={taskDescription}
@@ -856,50 +894,988 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
                       rows={3}
                     />
                   </div>
+                </CardContent>
+              </Card>
+              
+              {/* 配置预览 */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
+                  <h3 className="font-semibold text-blue-800">配置预览</h3>
+                </div>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  {generateConfigPreview()}
+                </p>
+              </div>
+            </div>
+          )}
 
+          {/* 第二步：标注数据来源配置 */}
+          {currentStep === 1 && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">第二步：标注数据来源配置</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div>
-                    <Label>执行频次 *</Label>
+                    <Label>数据产生方式 *</Label>
                     <RadioGroup 
-                      value={executionType} 
-                      onValueChange={(value: 'single' | 'periodic') => setExecutionType(value)}
+                      value={filterConfig.dataSource} 
+                      onValueChange={(value: 'online' | 'import') => setFilterConfig({...filterConfig, dataSource: value as 'online' | 'import'})}
                       className="flex space-x-4 mt-2"
                     >
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="single" id="single" />
-                        <Label htmlFor="single">单次</Label>
+                        <RadioGroupItem value="online" id="online" />
+                        <Label htmlFor="online">从消息表导入</Label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="periodic" id="periodic" />
-                        <Label htmlFor="periodic">周期</Label>
+                        <RadioGroupItem value="import" id="import" />
+                        <Label htmlFor="import">手动导入标注数据</Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  {/* 单次任务配置 */}
-                  {executionType === 'single' && (
+                  {/* 线上拉取配置 */}
+                  {filterConfig.dataSource === 'online' && (
                     <Card className="border-blue-200 bg-blue-50/30">
-                      <CardContent className="pt-4">
-                        <div className="flex items-center space-x-4 mb-4">
-                          <Checkbox
-                            id="execute-immediately"
-                            checked={executeImmediately}
-                            onCheckedChange={(checked) => setExecuteImmediately(checked as boolean)}
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center">
+                          <Database className="w-4 h-4 mr-2" />
+                          线上拉取配置
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <Label>任务频率 *</Label>
+                          <RadioGroup 
+                            value={executionType} 
+                            onValueChange={(value: 'single' | 'periodic') => setExecutionType(value)}
+                            className="flex space-x-4 mt-2"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="single" id="single-freq" />
+                              <Label htmlFor="single-freq">单次任务</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="periodic" id="periodic-freq" />
+                              <Label htmlFor="periodic-freq">周期任务</Label>
+                            </div>
+                          </RadioGroup>
+                          <p className="text-sm text-gray-500 mt-1">
+                            *周期任务首次执行后，仅支持修改过滤规则和人员分配，任务频率无法更改
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label>Bot ID *</Label>
+                            <Select 
+                              value={filterConfig.onlineConfig.botId} 
+                              onValueChange={(value) => setFilterConfig({
+                                ...filterConfig, 
+                                onlineConfig: {...filterConfig.onlineConfig, botId: value}
+                              })}
+                            >
+                              <SelectTrigger className="mt-2">
+                                <SelectValue placeholder="选择Bot ID" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {botOptions.map(bot => (
+                                  <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label>渠道 *</Label>
+                            <Select 
+                              value={filterConfig.onlineConfig.targetDB} 
+                              onValueChange={(value) => setFilterConfig({
+                                ...filterConfig, 
+                                onlineConfig: {...filterConfig.onlineConfig, targetDB: value}
+                              })}
+                            >
+                              <SelectTrigger className="mt-2">
+                                <SelectValue placeholder="选择渠道" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {dbOptions.map(db => (
+                                  <SelectItem key={db.id} value={db.id}>{db.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* 时间范围配置 */}
+                        {executionType === 'single' && (
+                          <div>
+                            <Label>时间范围 *</Label>
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                              <div>
+                                <Label className="text-sm">起始日期</Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full justify-start text-left font-normal mt-1",
+                                        !filterConfig.onlineConfig.singleTimeRange.startDate && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {filterConfig.onlineConfig.singleTimeRange.startDate ? 
+                                        format(filterConfig.onlineConfig.singleTimeRange.startDate, "yyyy-MM-dd") : 
+                                        "选择起始日期"
+                                      }
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                      mode="single"
+                                      selected={filterConfig.onlineConfig.singleTimeRange.startDate}
+                                      onSelect={(date) => setFilterConfig({
+                                        ...filterConfig,
+                                        onlineConfig: {
+                                          ...filterConfig.onlineConfig,
+                                          singleTimeRange: {
+                                            ...filterConfig.onlineConfig.singleTimeRange,
+                                            startDate: date
+                                          }
+                                        }
+                                      })}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-sm">结束日期</Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full justify-start text-left font-normal mt-1",
+                                        !filterConfig.onlineConfig.singleTimeRange.endDate && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {filterConfig.onlineConfig.singleTimeRange.endDate ? 
+                                        format(filterConfig.onlineConfig.singleTimeRange.endDate, "yyyy-MM-dd") : 
+                                        "选择结束日期"
+                                      }
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                      mode="single"
+                                      selected={filterConfig.onlineConfig.singleTimeRange.endDate}
+                                      onSelect={(date) => setFilterConfig({
+                                        ...filterConfig,
+                                        onlineConfig: {
+                                          ...filterConfig.onlineConfig,
+                                          singleTimeRange: {
+                                            ...filterConfig.onlineConfig.singleTimeRange,
+                                            endDate: date
+                                          }
+                                        }
+                                      })}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">
+                              单次任务默认从起始日期当日0:00到结束日期的23:59，支持同一天起止
+                            </p>
+                          </div>
+                        )}
+
+                        {/* 周期任务配置 */}
+                        {executionType === 'periodic' && (
+                          <div>
+                            <Label>周期配置 *</Label>
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                              <div>
+                                <Label className="text-sm">起始范围</Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full justify-start text-left font-normal mt-1",
+                                        !periodicConfig.startDate && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {periodicConfig.startDate ? format(periodicConfig.startDate, "yyyy-MM-dd") : "选择起始日期"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                      mode="single"
+                                      selected={periodicConfig.startDate}
+                                      onSelect={(date) => setPeriodicConfig({...periodicConfig, startDate: date})}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-sm">结束范围</Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full justify-start text-left font-normal mt-1",
+                                        !periodicConfig.endDate && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {periodicConfig.endDate ? format(periodicConfig.endDate, "yyyy-MM-dd") : "选择结束日期"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                      mode="single"
+                                      selected={periodicConfig.endDate}
+                                      onSelect={(date) => setPeriodicConfig({...periodicConfig, endDate: date})}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            </div>
+
+                            <div className="mt-4">
+                              <Label>生成节点（可多选）</Label>
+                              <div className="grid grid-cols-7 gap-2 mt-2">
+                                {weekdayNames.map((name, index) => (
+                                  <div key={index} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`weekday-${index}`}
+                                      checked={periodicConfig.weekdays.includes(index)}
+                                      onCheckedChange={(checked) => handleWeekdayChange(index, checked as boolean)}
+                                    />
+                                    <Label htmlFor={`weekday-${index}`} className="text-sm">
+                                      {name}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-sm text-gray-500 mt-1">
+                                支持从周一到周日任选生成节点，每个节点23:59分自动生成当日的标注数据
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 选填配置 */}
+                        <div className="space-y-4 pt-4 border-t border-gray-200">
+                          <h4 className="font-medium text-gray-700">选填配置</h4>
+                          
+                          <div>
+                            <Label>任务数量</Label>
+                            <Input
+                              type="number"
+                              value={filterConfig.onlineConfig.taskQuantity}
+                              onChange={(e) => setFilterConfig({
+                                ...filterConfig,
+                                onlineConfig: {...filterConfig.onlineConfig, taskQuantity: parseInt(e.target.value) || 0}
+                              })}
+                              placeholder="决定每次最终生成的待标注任务总量"
+                              className="mt-2"
+                            />
+                            <p className="text-sm text-gray-500 mt-1">
+                              若填写值小于全部会话数，则自动启用随机抽样；大于则按实际数量生成。不填写则默认拉取全部对话数据
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label>筛选回复类型</Label>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {['Agent', 'MQA', 'Manual'].map((type) => (
+                                <div key={type} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`reply-type-${type}`}
+                                    checked={filterConfig.onlineConfig.replyTypes.includes(type)}
+                                    onCheckedChange={(checked) => handleReplyTypeChange(type, checked as boolean)}
+                                  />
+                                  <Label htmlFor={`reply-type-${type}`} className="text-sm">
+                                    {type}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">
+                              选择数据中包含所需的回复类型，支持多选
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label>筛选风险程度</Label>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {[
+                                { id: 'high', name: '高风险' },
+                                { id: 'medium', name: '中风险' },
+                                { id: 'low', name: '低风险' },
+                                { id: 'none', name: '无风险' }
+                              ].map((level) => (
+                                <div key={level.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`risk-level-${level.id}`}
+                                    checked={filterConfig.onlineConfig.riskLevels.includes(level.id)}
+                                    onCheckedChange={(checked) => handleRiskLevelChange(level.id, checked as boolean)}
+                                  />
+                                  <Label htmlFor={`risk-level-${level.id}`} className="text-sm">
+                                    {level.name}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">
+                              从质检消息表中拉取数据时，可按自动质检结果的风险程度筛选数据，支持多选
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label>过滤配置</Label>
+                            <div className="space-y-2 mt-2">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="no-reply-filter"
+                                  checked={filterConfig.onlineConfig.filteringConfig.noReplyFilter}
+                                  onCheckedChange={(checked) => setFilterConfig({
+                                    ...filterConfig,
+                                    onlineConfig: {
+                                      ...filterConfig.onlineConfig,
+                                      filteringConfig: {
+                                        ...filterConfig.onlineConfig.filteringConfig,
+                                        noReplyFilter: checked as boolean
+                                      }
+                                    }
+                                  })}
+                                />
+                                <Label htmlFor="no-reply-filter" className="text-sm">
+                                  过滤无回复会话
+                                </Label>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id="bot-only-filter"
+                                  checked={filterConfig.onlineConfig.filteringConfig.botOnlyFilter}
+                                  onCheckedChange={(checked) => setFilterConfig({
+                                    ...filterConfig,
+                                    onlineConfig: {
+                                      ...filterConfig.onlineConfig,
+                                      filteringConfig: {
+                                        ...filterConfig.onlineConfig.filteringConfig,
+                                        botOnlyFilter: checked as boolean
+                                      }
+                                    }
+                                  })}
+                                />
+                                <Label htmlFor="bot-only-filter" className="text-sm">
+                                  过滤纯bot消息会话
+                                </Label>
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">
+                              支持条件滤除部分数据，如：无回复、会话为纯bot消息等
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* 手动导入配置 */}
+                  {filterConfig.dataSource === 'import' && (
+                    <Card className="border-green-200 bg-green-50/30">
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center">
+                          <Upload className="w-4 h-4 mr-2" />
+                          手动导入配置
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="text-sm text-gray-600 mb-4">
+                          <p>手动数据需完全按照模板导入，使用校验确保导入时就已经是可直接用于生成标注任务的形态</p>
+                          <p className="mt-1 text-amber-600">注意：手动导入的数据不支持创建为周期任务</p>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                          <Button
+                            variant="outline"
+                            onClick={downloadTemplate}
+                            className="flex items-center"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            下载导入模板
+                          </Button>
+                        </div>
+
+                        <div>
+                          <Label>选择文件</Label>
+                          <Input
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            onChange={handleFileUpload}
+                            className="mt-2"
                           />
-                          <Label htmlFor="execute-immediately">立即执行</Label>
+                        </div>
+
+                        {filterConfig.importConfig.uploadStatus === 'uploading' && (
+                          <div>
+                            <Label>上传进度</Label>
+                            <Progress value={filterConfig.importConfig.uploadProgress} className="mt-2" />
+                          </div>
+                        )}
+
+                        {filterConfig.importConfig.uploadStatus === 'success' && (
+                          <div className="p-3 bg-green-100 border border-green-300 rounded-lg">
+                            <div className="flex items-center">
+                              <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                              <span className="text-sm text-green-800">
+                                文件上传成功！检测到 {filterConfig.importConfig.sessionCount} 条会话数据
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {filterConfig.importConfig.uploadStatus === 'error' && (
+                          <div className="p-3 bg-red-100 border border-red-300 rounded-lg">
+                            <div className="flex items-center">
+                              <AlertCircle className="w-4 h-4 mr-2 text-red-600" />
+                              <span className="text-sm text-red-800">
+                                {filterConfig.importConfig.errorMessage || '文件上传失败，请检查文件格式'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </CardContent>
+              </Card>
+              
+              {/* 配置预览 */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
+                  <h3 className="font-semibold text-blue-800">配置预览</h3>
+                </div>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  {generateConfigPreview()}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 第三步：标注项配置 */}
+          {currentStep === 2 && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">第三步：标注项配置</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>标注项选择 *</Label>
+                    <p className="text-sm text-gray-600 mt-1 mb-4">
+                      选择任务具体需要标注哪些项目，当前仅需支持错误码标注类型，后续需迭代其他类型。必须至少选择一种。
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {availableAnnotationTypes.map((type) => (
+                        <div 
+                          key={type.id} 
+                          className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
+                            annotationTypeConfig.selectedTypes.includes(type.id) 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => handleAnnotationTypeChange(type.id, !annotationTypeConfig.selectedTypes.includes(type.id))}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  checked={annotationTypeConfig.selectedTypes.includes(type.id)}
+                                  onChange={() => {}} // 由父级div的onClick处理
+                                />
+                                <h4 className="font-medium text-gray-900">{type.name}</h4>
+                                {type.isSystem && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    系统预设
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 mt-2">{type.description}</p>
+                              
+                              {type.options && type.options.length > 0 && (
+                                <div className="mt-2">
+                                  <p className="text-xs text-gray-500 mb-1">选项：</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {type.options.slice(0, 3).map((option, index) => (
+                                      <Badge key={index} variant="outline" className="text-xs">
+                                        {option}
+                                      </Badge>
+                                    ))}
+                                    {type.options.length > 3 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{type.options.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {annotationTypeConfig.selectedTypes.includes(type.id) && (
+                              <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {annotationTypeConfig.selectedTypes.length === 0 && (
+                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center">
+                          <AlertCircle className="w-4 h-4 mr-2 text-amber-600" />
+                          <span className="text-sm text-amber-800">
+                            请至少选择一种标注类型
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {/* 配置预览 */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
+                  <h3 className="font-semibold text-blue-800">配置预览</h3>
+                </div>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  {generateConfigPreview()}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 第四步：任务分配 */}
+          {currentStep === 3 && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">第四步：任务分配</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>选择标注人员 *</Label>
+                    <p className="text-sm text-gray-600 mt-1 mb-4">
+                      从权限管理分组的标注人员列表中勾选，最终创建的任务会出现在被选中的标注师任务列表中，并通过通知告知对方。
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {annotatorOptions.map((annotator) => (
+                        <div 
+                          key={annotator.id} 
+                          className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
+                            assignmentConfig.annotators.includes(annotator.id) 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => handleAnnotatorChange(annotator.id, !assignmentConfig.annotators.includes(annotator.id))}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <Checkbox
+                                checked={assignmentConfig.annotators.includes(annotator.id)}
+                                onChange={() => {}} // 由父级div的onClick处理
+                              />
+                              <div>
+                                <h4 className="font-medium text-gray-900">{annotator.name}</h4>
+                                <p className="text-sm text-gray-600">{annotator.role}</p>
+                                <p className="text-xs text-gray-500">当前工作量: {annotator.workload}%</p>
+                              </div>
+                            </div>
+                            
+                            {assignmentConfig.annotators.includes(annotator.id) && (
+                              <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {assignmentConfig.annotators.length === 0 && (
+                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center">
+                          <AlertCircle className="w-4 h-4 mr-2 text-amber-600" />
+                          <span className="text-sm text-amber-800">
+                            请至少选择一位标注人员
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 分配方式选择 */}
+                  {assignmentConfig.annotators.length >= 2 && (
+                    <div className="pt-4 border-t border-gray-200">
+                      <Label>分配方式 *</Label>
+                      <p className="text-sm text-gray-600 mt-1 mb-4">
+                        当标注师≥2名时，需要选择分配形式
+                      </p>
+                      
+                      <RadioGroup 
+                        value={assignmentConfig.annotationType} 
+                        onValueChange={(value: 'cross' | 'distributed') => setAssignmentConfig({
+                          ...assignmentConfig, 
+                          annotationType: value
+                        })}
+                        className="space-y-4"
+                      >
+                        <div className="flex items-start space-x-3">
+                          <RadioGroupItem value="cross" id="cross-annotation" className="mt-1" />
+                          <div className="flex-1">
+                            <Label htmlFor="cross-annotation" className="font-medium">
+                              交叉标注
+                            </Label>
+                            <p className="text-sm text-gray-600 mt-1">
+                              多人标注同一数据。可填写每条数据最少需要被标注的次数，最大不超过标注师的人数，由系统自动分配人力；不填写此项时，每个人都会全量标注数据。
+                            </p>
+                          </div>
                         </div>
                         
-                        {!executeImmediately && (
-                          <div>
-                            <Label>执行时间</Label>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full justify-start text-left font-normal mt-2",
-                                    !singleExecutionDate && "text-muted-foreground"
-                                  )}
-                                >
+                        <div className="flex items-start space-x-3">
+                          <RadioGroupItem value="distributed" id="distributed-annotation" className="mt-1" />
+                          <div className="flex-1">
+                            <Label htmlFor="distributed-annotation" className="font-medium">
+                              分散标注
+                            </Label>
+                            <p className="text-sm text-gray-600 mt-1">
+                              不同人标注，瓜分整份数据。需要设置数据分配规则。
+                            </p>
+                          </div>
+                        </div>
+                      </RadioGroup>
+
+                      {/* 分散标注的分配规则 */}
+                      {assignmentConfig.annotationType === 'distributed' && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                          <Label>数据分配规则 *</Label>
+                          <RadioGroup 
+                            value={assignmentConfig.allocationMethod} 
+                            onValueChange={(value: 'quota' | 'average') => setAssignmentConfig({
+                              ...assignmentConfig, 
+                              allocationMethod: value
+                            })}
+                            className="mt-2 space-y-2"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="quota" id="quota-allocation" />
+                              <Label htmlFor="quota-allocation">
+                                定额分配（为每位标注师分别设置具体需要标注的数据量，综合不超过任务总量）
+                              </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="average" id="average-allocation" />
+                              <Label htmlFor="average-allocation">
+                                平均分配（按数据总量/标注师人数，平均为每位标注师分配任务）
+                              </Label>
+                            </div>
+                          </RadioGroup>
+
+                          {/* 定额分配的具体配置 */}
+                          {assignmentConfig.allocationMethod === 'quota' && (
+                            <div className="mt-4 space-y-3">
+                              <Label>定额配置</Label>
+                              {assignmentConfig.annotators.map((annotatorId) => {
+                                const annotator = annotatorOptions.find(a => a.id === annotatorId)
+                                return (
+                                  <div key={annotatorId} className="flex items-center space-x-3">
+                                    <span className="w-20 text-sm font-medium">{annotator?.name}</span>
+                                    <Input
+                                      type="number"
+                                      value={assignmentConfig.quotaConfig[annotatorId] || 0}
+                                      onChange={(e) => handleQuotaChange(annotatorId, parseInt(e.target.value) || 0)}
+                                      placeholder="数据量"
+                                      className="w-24"
+                                    />
+                                    <span className="text-sm text-gray-500">条</span>
+                                  </div>
+                                )
+                              })}
+                              
+                              <div className="text-sm text-gray-600">
+                                <p>总配额: {getTotalQuota()} / {getTaskQuantity()} 条</p>
+                                {getTotalQuota() > getTaskQuantity() && (
+                                  <p className="text-red-600">⚠️ 总配额超过任务总量</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {assignmentConfig.annotators.length === 1 && (
+                    <div className="pt-4 border-t border-gray-200">
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center">
+                          <Target className="w-4 h-4 mr-2 text-blue-600" />
+                          <span className="text-sm text-blue-800">
+                            当标注师只有1名时：不提供分配方式配置，全量交由该标注师标注。
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              {/* 配置预览 */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
+                  <h3 className="font-semibold text-blue-800">配置预览</h3>
+                </div>
+                <p className="text-sm text-blue-700 leading-relaxed">
+                  {generateConfigPreview()}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 第五步：时限配置 */}
+          {currentStep === 4 && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">第五步：时限配置</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>完成期限设置 *</Label>
+                    <p className="text-sm text-gray-600 mt-1 mb-4">
+                      填写截止小时数，后台计算后展示DDL在标注师的任务列表中。配置每项任务的指导性完成时限，用于推进进度及规划排期。
+                    </p>
+                    
+                    <RadioGroup 
+                      value={assignmentConfig.deadline.type} 
+                      onValueChange={(value: 'absolute' | 'relative') => setAssignmentConfig({
+                        ...assignmentConfig, 
+                        deadline: { ...assignmentConfig.deadline, type: value }
+                      })}
+                      className="space-y-4"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <RadioGroupItem value="absolute" id="absolute-deadline" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="absolute-deadline" className="font-medium">
+                            绝对时间
+                          </Label>
+                          <p className="text-sm text-gray-600 mt-1">
+                            设置具体的截止日期和时间
+                          </p>
+                          
+                          {assignmentConfig.deadline.type === 'absolute' && (
+                            <div className="mt-3">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className={cn(
+                                      "w-full justify-start text-left font-normal",
+                                      !assignmentConfig.deadline.absoluteDate && "text-muted-foreground"
+                                    )}
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {assignmentConfig.deadline.absoluteDate ? 
+                                      format(assignmentConfig.deadline.absoluteDate, "yyyy年MM月dd日 HH:mm") : 
+                                      "选择截止时间"
+                                    }
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                  <Calendar
+                                    mode="single"
+                                    selected={assignmentConfig.deadline.absoluteDate}
+                                    onSelect={(date) => setAssignmentConfig({
+                                      ...assignmentConfig,
+                                      deadline: { ...assignmentConfig.deadline, absoluteDate: date }
+                                    })}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-start space-x-3">
+                        <RadioGroupItem value="relative" id="relative-deadline" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="relative-deadline" className="font-medium">
+                            相对时间
+                          </Label>
+                          <p className="text-sm text-gray-600 mt-1">
+                            设置任务生成后的相对时限
+                          </p>
+                          
+                          {assignmentConfig.deadline.type === 'relative' && (
+                            <div className="mt-3 grid grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm">天数</Label>
+                                <Input
+                                  type="number"
+                                  value={assignmentConfig.deadline.relativeDays}
+                                  onChange={(e) => setAssignmentConfig({
+                                    ...assignmentConfig,
+                                    deadline: { 
+                                      ...assignmentConfig.deadline, 
+                                      relativeDays: parseInt(e.target.value) || 0 
+                                    }
+                                  })}
+                                  placeholder="0"
+                                  className="mt-1"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-sm">小时数</Label>
+                                <Input
+                                  type="number"
+                                  value={assignmentConfig.deadline.relativeHours}
+                                  onChange={(e) => setAssignmentConfig({
+                                    ...assignmentConfig,
+                                    deadline: { 
+                                      ...assignmentConfig.deadline, 
+                                      relativeHours: parseInt(e.target.value) || 0 
+                                    }
+                                  })}
+                                  placeholder="10"
+                                  className="mt-1"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {/* 最终配置预览 */}
+              <Card className="border-green-200 bg-green-50/30">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center text-green-800">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    最终配置预览
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <span className="font-medium text-green-800">任务名称：</span>
+                      <span className="text-green-700">{generateTaskName() || '未设置'}</span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">数据类型：</span>
+                      <span className="text-green-700">
+                        {dataType === 'dialogue' ? '对话标注' : dataType}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">数据来源：</span>
+                      <span className="text-green-700">
+                        {filterConfig.dataSource === 'online' ? '线上拉取' : '手动导入'}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">任务频率：</span>
+                      <span className="text-green-700">
+                        {executionType === 'single' ? '单次任务' : '周期任务'}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">标注类型：</span>
+                      <span className="text-green-700">
+                        {annotationTypeConfig.selectedTypes.length > 0 
+                          ? annotationTypeConfig.selectedTypes.map(typeId => {
+                              const type = availableAnnotationTypes.find(t => t.id === typeId)
+                              return type?.name
+                            }).filter(Boolean).join('、')
+                          : '未选择'
+                        }
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">标注人员：</span>
+                      <span className="text-green-700">
+                        {assignmentConfig.annotators.length > 0 
+                          ? `${assignmentConfig.annotators.length}位标注员`
+                          : '未选择'
+                        }
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">分配方式：</span>
+                      <span className="text-green-700">
+                        {assignmentConfig.annotators.length === 1 
+                          ? '全量分配' 
+                          : assignmentConfig.annotationType === 'cross' 
+                            ? '交叉标注' 
+                            : '分散标注'
+                        }
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <span className="font-medium text-green-800">完成期限：</span>
+                      <span className="text-green-700">
+                        {assignmentConfig.deadline.type === 'absolute' && assignmentConfig.deadline.absoluteDate
+                          ? format(assignmentConfig.deadline.absoluteDate, 'yyyy年MM月dd日 HH:mm')
+                          : assignmentConfig.deadline.type === 'relative'
+                            ? `${assignmentConfig.deadline.relativeDays}天${assignmentConfig.deadline.relativeHours}小时`
+                            : '未设置'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-lg">
+                    <p className="text-sm text-green-800 leading-relaxed">
+                      {generateConfigPreview()}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   {singleExecutionDate ? format(singleExecutionDate, "yyyy-MM-dd HH:mm") : "选择执行时间"}
                                 </Button>

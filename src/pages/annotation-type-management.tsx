@@ -362,13 +362,13 @@ export default function AnnotationTypeManagement() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">标注类型管理</h1>
+          <h1 className="page-title text-gray-900">标注类型管理</h1>
           <p className="text-gray-600 mt-1">管理标注任务的类型配置</p>
         </div>
 
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">标注类型配置</h2>
+            <h2 className="text-sm font-medium">标注类型配置</h2>
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700">
@@ -742,7 +742,7 @@ export default function AnnotationTypeManagement() {
             {ruleStep === 'parameters' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium mb-4">参数配置</h3>
+                  <h3 className="text-sm font-medium mb-4">参数配置</h3>
                   <p className="text-sm text-gray-600 mb-4">
                     定义统计计算所需的参数，这些参数将用于后续的指标计算公式中
                   </p>
@@ -982,7 +982,7 @@ export default function AnnotationTypeManagement() {
             {ruleStep === 'metrics' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium mb-4">指标配置</h3>
+                  <h3 className="text-sm font-medium mb-4">指标配置</h3>
                   <p className="text-sm text-gray-600 mb-4">
                     基于已定义的参数创建统计指标，设置计算公式和显示格式
                   </p>

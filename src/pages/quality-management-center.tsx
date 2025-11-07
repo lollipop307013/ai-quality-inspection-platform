@@ -7,10 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { 
   Settings, Target, FileText, BarChart3, Users, 
   ArrowRight, CheckCircle, Clock, AlertCircle,
-  Plus, Edit, Eye, TrendingUp, Database, Workflow, ClipboardCheck
+  Plus, Edit, Eye, TrendingUp, Database, Workflow
 } from 'lucide-react'
 import { useGlobalStore } from '../store/globalStore'
-import ReviewTaskSelector from '../components/ReviewTaskSelector'
 
 
 
@@ -37,7 +36,7 @@ const QualityManagementCenter: React.FC = () => {
     <div className="space-y-6">
       {/* 平台概览 */}
       <div>
-        <h2 className="page-title mb-4">质检管理中心概览</h2>
+        <h2 className="page-title mb-4">标注管理中心概览</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-2">
@@ -82,7 +81,7 @@ const QualityManagementCenter: React.FC = () => {
 
       {/* 功能流程图 */}
       <div>
-        <h3 className="text-lg font-medium mb-4">平台功能流程</h3>
+        <h3 className="text-sm font-medium mb-4">平台功能流程</h3>
         <div className="bg-gray-50 p-6 rounded-lg">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-center space-y-2">
@@ -130,7 +129,7 @@ const QualityManagementCenter: React.FC = () => {
 
       {/* 快速操作 */}
       <div>
-        <h3 className="text-lg font-medium mb-4">快速操作</h3>
+        <h3 className="text-sm font-medium mb-4">快速操作</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/task-template-management')}>
             <CardHeader>
@@ -206,33 +205,13 @@ const QualityManagementCenter: React.FC = () => {
             </CardContent>
           </Card>
 
-          <ReviewTaskSelector 
-            trigger={
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center">
-                    <ClipboardCheck className="w-5 h-5 mr-2 text-indigo-600" />
-                    审核工作台
-                  </CardTitle>
-                  <CardDescription>
-                    进行质量审核和交叉验证
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">选择任务进入审核</span>
-                    <ArrowRight className="w-4 h-4 text-gray-400" />
-                  </div>
-                </CardContent>
-              </Card>
-            }
-          />
+          {/* 审核工作台已移除 */}
         </div>
       </div>
 
       {/* 最近任务 */}
       <div>
-        <h3 className="text-lg font-medium mb-4">最近任务</h3>
+        <h3 className="text-sm font-medium mb-4">最近任务</h3>
         <div className="space-y-3">
           {tasks.slice(0, 3).map((task) => (
             <Card key={task.id} className="cursor-pointer hover:shadow-sm transition-shadow">
@@ -274,7 +253,7 @@ const QualityManagementCenter: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">质检管理中心</h1>
+              <h1 className="page-title text-gray-900">标注管理中心</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Badge variant="outline" className="text-xs">
@@ -327,6 +306,8 @@ const QualityManagementCenter: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 争议数据检测功能已移除 */}
     </div>
   )
 }

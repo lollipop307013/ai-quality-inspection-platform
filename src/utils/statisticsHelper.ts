@@ -3,11 +3,10 @@
  * 
  * 功能：
  * 1. 多人标注结果聚合（平均值/中位数）
- * 2. 审核替换逻辑
- * 3. 标注错误率计算
+ * 2. 标注错误率计算
  */
 
-import { AnnotationRecord, ReviewRecord, Task } from '../store/globalStore'
+import { AnnotationRecord, Task } from '../store/globalStore'
 
 /**
  * 计算数值数组的平均值
@@ -107,46 +106,7 @@ export function aggregateAnnotations(
   return result
 }
 
-/**
- * 使用审核结论替换标注结果
- * 
- * @param annotationRecords 所有标注记录
- * @param reviewRecords 所有审核记录
- * @param taskId 任务ID
- * @returns 替换后的标注记录（有审核的用审核结论，无审核的用原标注）
- */
-export function replaceWithReviewResults(
-  annotationRecords: AnnotationRecord[],
-  reviewRecords: ReviewRecord[],
-  taskId: string
-): AnnotationRecord[] {
-  const taskAnnotations = annotationRecords.filter(r => r.taskId === taskId)
-  const taskReviews = reviewRecords.filter(r => r.taskId === taskId)
-  
-  // 创建审核记录的映射 dataId -> ReviewRecord
-  const reviewMap = new Map<string, ReviewRecord>()
-  taskReviews.forEach(review => {
-    reviewMap.set(review.dataId, review)
-  })
 
-  // 替换逻辑
-  return taskAnnotations.map(record => {
-    const review = reviewMap.get(record.dataId)
-    
-    if (review) {
-      // 有审核记录，使用审核员的标注结果
-      return {
-        ...record,
-        annotations: review.annotations,
-        status: 'reviewed' as const,
-        updatedAt: review.updatedAt
-      }
-    } else {
-      // 无审核记录，使用原标注结果
-      return record
-    }
-  })
-}
 
 /**
  * 计算标注师的错误率
@@ -223,30 +183,26 @@ export function generateErrorRateReport(
 }
 
 /**
- * 计算任务的整体统计数据（考虑审核替换）
+ * 计算任务的整体统计数据
  * 
  * @param task 任务信息
  * @param annotationRecords 所有标注记录
- * @param reviewRecords 所有审核记录
  * @returns 统计数据
  */
 export function calculateTaskStatistics(
   task: Task,
-  annotationRecords: AnnotationRecord[],
-  reviewRecords: ReviewRecord[]
+  annotationRecords: AnnotationRecord[]
 ): {
   totalData: number
   annotatedData: number
-  reviewedData: number
   aggregatedResults: Record<string, any>[]
   errorRateReport: ReturnType<typeof generateErrorRateReport>
 } {
-  // 使用审核结论替换标注结果
-  const finalRecords = replaceWithReviewResults(annotationRecords, reviewRecords, task.id)
+  const taskRecords = annotationRecords.filter(r => r.taskId === task.id)
 
   // 按数据ID分组
   const dataGroups = new Map<string, AnnotationRecord[]>()
-  finalRecords.forEach(record => {
+  taskRecords.forEach(record => {
     if (!dataGroups.has(record.dataId)) {
       dataGroups.set(record.dataId, [])
     }
@@ -265,16 +221,12 @@ export function calculateTaskStatistics(
     })
   })
 
-  // 计算已审核的数据数量
-  const reviewedDataIds = new Set(reviewRecords.filter(r => r.taskId === task.id).map(r => r.dataId))
-
   // 生成错误率报告
   const errorRateReport = generateErrorRateReport(task, annotationRecords)
 
   return {
     totalData: dataGroups.size,
     annotatedData: dataGroups.size,
-    reviewedData: reviewedDataIds.size,
     aggregatedResults,
     errorRateReport
   }

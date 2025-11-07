@@ -160,7 +160,7 @@ export default function SystemConfiguration() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">质检标准配置</h1>
+          <h1 className="page-title text-gray-900">质检标准配置</h1>
           <p className="text-gray-600 mt-1">管理和配置质检标准体系</p>
         </div>
 

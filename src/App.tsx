@@ -5,12 +5,12 @@ import QualityManagementCenter from './pages/quality-management-center'
 import AnnotationWorkbench from './pages/annotation-workbench'
 import TaskCenter from './pages/task-center'
 import SystemConfiguration from './pages/system-configuration'
+import AutoQualityInspection from './pages/auto-quality-inspection'
 import AnnotationTypeManagement from './pages/annotation-type-management'
 import AnnotationTaskTypeManagement from './pages/annotation-task-type-management'
 import TaskCreation from './pages/task-creation'
 import UserPermissionManagement from './pages/user-permission-management'
 import UserManagement from './pages/user-management'
-import ReviewWorkbench from './pages/review-workbench'
 import keepAlive from './utils/keepAlive'
 import './globals.css'
 import './styles/typography.css'
@@ -34,12 +34,12 @@ function App() {
           <Route path="/annotation-workbench" element={<AnnotationWorkbench />} />
           <Route path="/task-center" element={<TaskCenter />} />
           <Route path="/quality-standards" element={<SystemConfiguration />} />
+          <Route path="/auto-quality-inspection" element={<AutoQualityInspection />} />
           <Route path="/task-template-management" element={<AnnotationTaskTypeManagement />} />
           <Route path="/annotation-type-management" element={<AnnotationTypeManagement />} />
           <Route path="/task-creation" element={<TaskCreation />} />
           <Route path="/user-management" element={<UserManagement />} />
           <Route path="/user-permission-management" element={<UserPermissionManagement />} />
-          <Route path="/review-workbench" element={<ReviewWorkbench />} />
         </Routes>
       </Layout>
     </Router>

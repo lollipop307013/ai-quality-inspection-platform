@@ -1457,7 +1457,7 @@ export default function AnnotationWorkbench() {
       {/* 左侧任务层级目录 */}
       <div className="w-96 bg-white border-r border-gray-200 flex flex-col" style={{ scrollbarGutter: 'stable' }}>
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">标注任务</h2>
+          <h2 className="text-lg font-semibold text-gray-900">标注任务</h2>
         </div>
         
         <div className="flex-1 overflow-y-scroll thin-scrollbar">
@@ -1469,7 +1469,7 @@ export default function AnnotationWorkbench() {
       {!isKnowledgeCollapsed ? (
         <div className="w-96 bg-white border-r border-gray-200 flex flex-col relative">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-900">回复参考知识</h2>
+            <h2 className="text-lg font-semibold text-gray-900">回复参考知识</h2>
           </div>
           {/* 收起按钮 - 居中显示，只显示一半 */}
           <button
@@ -1823,7 +1823,7 @@ export default function AnnotationWorkbench() {
         {/* 标题区域 - 与其他栏目保持一致的高度 */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <h2 className="text-xl font-bold text-gray-900">对话详情</h2>
+            <h2 className="text-lg font-semibold text-gray-900">对话详情</h2>
             <div className={`px-2 py-1 rounded-full text-xs font-medium ${
               isPending 
                 ? 'bg-amber-100 text-amber-700 border border-amber-200'
@@ -1878,7 +1878,7 @@ export default function AnnotationWorkbench() {
       {/* 右侧标注区域 */}
       <div className="w-72 bg-white border-l border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">标注操作</h2>
+          <h2 className="text-lg font-semibold text-gray-900">标注操作</h2>
         </div>
         
         {/* 标注项目滚动区域 */}

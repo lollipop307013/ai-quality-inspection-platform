@@ -121,15 +121,6 @@ const UserPermissionManagement: React.FC = () => {
       userCount: 15,
       permissions: ['dashboard', 'annotation'],
       createdAt: '2025-01-01T00:00:00Z'
-    },
-    {
-      id: 'reviewer',
-      name: '质检员',
-      description: '负责质量检查和审核工作',
-      color: 'bg-purple-500',
-      userCount: 8,
-      permissions: ['dashboard', 'quality', 'quality-rules', 'quality-reports'],
-      createdAt: '2025-01-01T00:00:00Z'
     }
   ])
 
@@ -164,16 +155,6 @@ const UserPermissionManagement: React.FC = () => {
       status: 'active',
       lastLogin: '2025-01-10T16:45:00Z',
       createdAt: '2025-01-03T00:00:00Z'
-    },
-    {
-      id: '4',
-      name: '赵六',
-      email: 'zhaoliu@example.com',
-      role: '质检员',
-      groupId: 'reviewer',
-      status: 'inactive',
-      lastLogin: '2025-01-08T09:20:00Z',
-      createdAt: '2025-01-04T00:00:00Z'
     }
   ])
 
@@ -333,7 +314,7 @@ const UserPermissionManagement: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">用户权限管理</h1>
+          <h1 className="page-title text-gray-900">用户权限管理</h1>
           <p className="text-gray-600 mt-1">管理用户分组和权限配置</p>
         </div>
 

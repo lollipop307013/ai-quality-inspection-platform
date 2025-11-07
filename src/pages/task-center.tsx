@@ -46,7 +46,7 @@ interface TaskStatistics {
   }
 }
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, Search, MoreHorizontal, Play, Pause, Download, BarChart3, Calendar, Users, Clock, CheckCircle, AlertTriangle, ChevronDown, Target, TrendingUp, Activity, FolderOpen, Bell, Trash2, X, Settings, Eye, PieChart, DollarSign, ClipboardCheck } from 'lucide-react'
+import { Plus, Search, MoreHorizontal, Play, Pause, Download, BarChart3, Calendar, Users, Clock, CheckCircle, AlertTriangle, ChevronDown, Target, TrendingUp, Activity, FolderOpen, Bell, Trash2, X, Settings, Eye, PieChart, DollarSign } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Badge } from '../components/ui/badge'
@@ -54,7 +54,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
-import TaskCreationDialog from '../components/task-creation-dialog-clean.tsx'
+import TaskCreationDialog from '../components/task-creation-dialog-new.tsx'
 
 // 生成标注人员数据
 function generateAnnotators() {
@@ -253,7 +253,18 @@ export default function TaskCenter() {
 
   // 处理任务创建
   const handleTaskCreated = (newTask: any) => {
-    setTasks(prevTasks => [newTask, ...prevTasks])
+    // 为新任务添加创建者信息
+    const taskWithCreator = {
+      ...newTask,
+      creator: 'charliazhang', // 当前用户
+      channel: newTask.config?.filterConfig?.dataSource === 'online' ? '线上拉取' : '手动导入'
+    }
+    
+    console.log('新任务已创建:', taskWithCreator)
+    setTasks(prevTasks => [taskWithCreator, ...prevTasks])
+    
+    // 显示成功提示
+    // 这里可以添加 toast 通知
   }
 
   // 处理周期任务展开/收起
@@ -335,24 +346,7 @@ export default function TaskCenter() {
     return task.status === 'completed' || task.status === 'paused'
   }
 
-  // 进入审核模式
-  const handleEnterReview = (task: any, mode: 'cross' | 'distributed', annotatorId?: string) => {
-    const params = new URLSearchParams({
-      taskId: task.id.toString(),
-      mode: mode
-    })
-    
-    if (annotatorId) {
-      params.append('annotatorId', annotatorId)
-    }
-    
-    navigate(`/review-workbench?${params.toString()}`)
-  }
 
-  // 判断任务是否可以进入审核
-  const canReview = (task: any) => {
-    return task.status === 'completed' || task.status === 'paused' || task.status === 'running'
-  }
 
   return (
     <div className="p-8 bg-gray-50 min-h-full">
@@ -360,8 +354,8 @@ export default function TaskCenter() {
         {/* 页面标题和操作 */}
         <div className="flex justify-between items-center mb-12">
           <div>
-            <h1 className="page-title">质检任务中心</h1>
-            <p className="secondary-text mt-2">管理和监控所有质检任务</p>
+            <h1 className="page-title">标注任务中心</h1>
+            <p className="secondary-text mt-2">管理和监控所有标注任务</p>
           </div>
           
           {/* 任务创建弹窗 */}
@@ -480,7 +474,7 @@ export default function TaskCenter() {
                         {isPeriodicTask && (
                           <FolderOpen className="w-5 h-5 text-blue-600 shrink-0" />
                         )}
-                        <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
+                        <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
                           {isPeriodicTask ? task.baseName : task.name}
                         </h3>
                         <Badge 
@@ -644,18 +638,7 @@ export default function TaskCenter() {
                                 标记完成
                               </DropdownMenuItem>
                             )}
-                            {canReview(task) && (
-                              <>
-                                <DropdownMenuItem onClick={() => handleEnterReview(task, 'cross')} className="rounded-lg">
-                                  <ClipboardCheck className="w-4 h-4 mr-2" />
-                                  交叉审核
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEnterReview(task, 'distributed')} className="rounded-lg">
-                                  <ClipboardCheck className="w-4 h-4 mr-2" />
-                                  分散审核
-                                </DropdownMenuItem>
-                              </>
-                            )}
+
                             {isAdmin && (
                               <DropdownMenuItem onClick={() => handleEditTaskConfig(task)} className="rounded-lg">
                                 <Settings className="w-4 h-4 mr-2" />
@@ -690,7 +673,7 @@ export default function TaskCenter() {
                           <div className="flex items-center space-x-3">
                             <FolderOpen className="w-6 h-6" />
                             <div>
-                              <h3 className="text-xl font-semibold">{task.baseName}</h3>
+                              <h3 className="text-sm font-medium">{task.baseName}</h3>
                               <p className="text-blue-100 text-sm">历史执行记录 ({task.periodicHistory?.length || 0} 个任务)</p>
                             </div>
                           </div>
@@ -727,7 +710,7 @@ export default function TaskCenter() {
                                         {index + 1}
                                       </div>
                                       <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
+                                        <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
                                           {historyTask.name}
                                         </h3>
                                         <Badge variant="outline" className="text-xs px-2 py-1 rounded-md shrink-0 border-gray-200 mt-1">
@@ -961,18 +944,7 @@ export default function TaskCenter() {
                                               标记完成
                                             </DropdownMenuItem>
                                           )}
-                                          {canReview(historyTask) && (
-                                            <>
-                                              <DropdownMenuItem onClick={() => handleEnterReview(historyTask, 'cross')} className="rounded-lg">
-                                                <ClipboardCheck className="w-4 h-4 mr-2" />
-                                                交叉审核
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => handleEnterReview(historyTask, 'distributed')} className="rounded-lg">
-                                                <ClipboardCheck className="w-4 h-4 mr-2" />
-                                                分散审核
-                                              </DropdownMenuItem>
-                                            </>
-                                          )}
+
                                           <DropdownMenuItem onClick={() => handleViewStats(historyTask)} className="rounded-lg">
                                             <BarChart3 className="w-4 h-4 mr-2" />
                                             查看统计
@@ -1071,7 +1043,7 @@ export default function TaskCenter() {
         <Dialog open={showTaskDetailDialog} onOpenChange={setShowTaskDetailDialog}>
           <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold flex items-center">
+              <DialogTitle className="text-sm font-medium flex items-center">
                 <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
                 任务详情 - {selectedTask?.name}
               </DialogTitle>
@@ -1083,7 +1055,7 @@ export default function TaskCenter() {
                   <div className="flex-1 overflow-y-auto thin-scrollbar">
                     <div className="space-y-6">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
                           <PieChart className="w-5 h-5 mr-2 text-blue-600" />
                           统计信息
                         </h3>
@@ -1312,7 +1284,7 @@ export default function TaskCenter() {
                   <div className="flex-1 overflow-y-auto thin-scrollbar">
                     <div className="space-y-6">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
                           <Users className="w-5 h-5 mr-2 text-green-600" />
                           人员进度
                         </h3>

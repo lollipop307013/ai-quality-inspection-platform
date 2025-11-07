@@ -222,17 +222,7 @@ export default function Layout({ children }: LayoutProps) {
                     标注工作台
                   </Link>
 
-                  <Link
-                    to="/task-center"
-                    className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                      isActive('/task-center') 
-                        ? 'bg-blue-600 text-white' 
-                        : 'text-gray-300 hover:bg-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <UserCheck className="mr-3 h-4 w-4" />
-                    审核工作台
-                  </Link>
+                  {/* 审核相关功能已移除 */}
                   
                   {/* 管理员专用菜单项 */}
                   {currentUser.role === 'admin' && (
@@ -259,6 +249,18 @@ export default function Layout({ children }: LayoutProps) {
                       >
                         <FileText className="mr-3 h-4 w-4" />
                         质检标准配置
+                      </Link>
+                      
+                      <Link
+                        to="/auto-quality-inspection"
+                        className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                          isActive('/auto-quality-inspection') 
+                            ? 'bg-blue-600 text-white' 
+                            : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <Settings className="mr-3 h-4 w-4" />
+                        自动质检配置
                       </Link>
                       
                       <Link

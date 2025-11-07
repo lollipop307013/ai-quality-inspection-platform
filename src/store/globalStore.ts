@@ -54,23 +54,7 @@ export interface AnnotationRecord {
   updatedAt: string
 }
 
-// 审核记录
-export interface ReviewRecord {
-  id: string
-  taskId: string
-  dataId: string // 数据项ID
-  reviewerId: string // 审核员ID
-  reviewerName: string
-  annotations: Record<string, any> // 审核员的标注结果
-  differences: {
-    annotatorId: string
-    annotatorName: string
-    differenceFields: string[] // 有差异的字段
-  }[] // 与哪些标注员有差异
-  status: 'completed' | 'pending'
-  createdAt: string
-  updatedAt: string
-}
+
 
 // 任务数据结构
 export interface Task {
@@ -102,7 +86,7 @@ export interface Task {
 }
 
 // 用户角色类型
-export type UserRole = 'admin' | 'annotator' | 'reviewer'
+export type UserRole = 'admin' | 'annotator'
 
 // 用户信息接口
 export interface UserInfo {
@@ -160,13 +144,7 @@ interface GlobalState {
   getAnnotationRecordsByData: (taskId: string, dataId: string) => AnnotationRecord[]
   getAnnotationRecordsByAnnotator: (taskId: string, annotatorId: string) => AnnotationRecord[]
 
-  // 审核记录管理
-  reviewRecords: ReviewRecord[]
-  setReviewRecords: (records: ReviewRecord[]) => void
-  addReviewRecord: (record: ReviewRecord) => void
-  updateReviewRecord: (id: string, updates: Partial<ReviewRecord>) => void
-  getReviewRecordsByTask: (taskId: string) => ReviewRecord[]
-  getReviewRecordByData: (taskId: string, dataId: string) => ReviewRecord | undefined
+
 }
 
 // 初始用户数据
@@ -382,27 +360,7 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
     )
   },
 
-  // 审核记录状态
-  reviewRecords: [],
-  setReviewRecords: (records) => set({ reviewRecords: records }),
-  addReviewRecord: (record) => set((state) => ({
-    reviewRecords: [...state.reviewRecords, record]
-  })),
-  updateReviewRecord: (id, updates) => set((state) => ({
-    reviewRecords: state.reviewRecords.map(record =>
-      record.id === id ? { ...record, ...updates, updatedAt: new Date().toISOString() } : record
-    )
-  })),
-  getReviewRecordsByTask: (taskId) => {
-    const state = get()
-    return state.reviewRecords.filter(record => record.taskId === taskId)
-  },
-  getReviewRecordByData: (taskId, dataId) => {
-    const state = get()
-    return state.reviewRecords.find(record => 
-      record.taskId === taskId && record.dataId === dataId
-    )
-  }
+
 }))
 
 // 导出

@@ -97,14 +97,6 @@ const UserManagement: React.FC = () => {
       color: 'bg-green-500',
       permissions: ['dashboard', 'annotation-workbench'],
       createdAt: '2025-01-01T00:00:00Z'
-    },
-    {
-      id: 'reviewer',
-      name: '质检员',
-      description: '负责质量检查和审核',
-      color: 'bg-purple-500',
-      permissions: ['dashboard', 'annotation-workbench', 'quality-standards'],
-      createdAt: '2025-01-01T00:00:00Z'
     }
   ])
 
@@ -413,7 +405,7 @@ const UserManagement: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">用户管理</h1>
+          <h1 className="page-title text-gray-900">用户管理</h1>
           <p className="text-gray-600 mt-1">管理内外部人员权限和账号</p>
         </div>
 

@@ -123,8 +123,8 @@ const TaskCreation: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">创建质检任务</h1>
-          <p className="text-gray-600 mt-1">按步骤创建新的质检任务，选择合适的任务类型</p>
+          <h1 className="page-title text-gray-900">创建标注任务</h1>
+          <p className="text-gray-600 mt-1">按步骤创建新的标注任务，选择合适的任务类型</p>
         </div>
 
       {/* 步骤指示器 */}
@@ -166,7 +166,7 @@ const TaskCreation: React.FC = () => {
           {currentStep === 1 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium mb-4">基本信息</h3>
+                <h3 className="text-sm font-medium mb-4">基本信息</h3>
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="task-name">任务名称 *</Label>
@@ -211,7 +211,7 @@ const TaskCreation: React.FC = () => {
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium mb-4">选择标注任务类型模板</h3>
+                <h3 className="text-sm font-medium mb-4">选择标注任务类型模板</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   选择一个标注任务类型模板，模板包含预定义的标注项和自定义标注项配置
                 </p>
@@ -269,7 +269,7 @@ const TaskCreation: React.FC = () => {
           {currentStep === 3 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium mb-4">配置任务参数</h3>
+                <h3 className="text-sm font-medium mb-4">配置任务参数</h3>
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="task-deadline">截止时间 *</Label>
@@ -334,7 +334,7 @@ const TaskCreation: React.FC = () => {
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium mb-4">确认创建任务</h3>
+                <h3 className="text-sm font-medium mb-4">确认创建任务</h3>
                 <div className="bg-gray-50 p-6 rounded-lg">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>

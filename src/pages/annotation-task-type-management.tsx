@@ -318,8 +318,8 @@ const AnnotationTaskTypeManagement: React.FC = () => {
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">任务模板管理</h1>
-              <p className="text-sm sm:text-base text-gray-600 mt-1">管理标注任务模板配置，用于快速创建标准化的质检任务</p>
+              <h1 className="page-title text-gray-900">任务模板管理</h1>
+              <p className="text-sm sm:text-base text-gray-600 mt-1">管理标注任务模板配置，用于快速创建标准化的标注任务</p>
             </div>
             <div className="flex-shrink-0">
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -342,7 +342,7 @@ const AnnotationTaskTypeManagement: React.FC = () => {
                   <div className="space-y-4 sm:space-y-6 p-1">
                     {/* 基本信息 */}
                     <div className="space-y-3 sm:space-y-4">
-                      <h3 className="text-base sm:text-lg font-medium">基本信息</h3>
+                      <h3 className="text-sm font-medium">基本信息</h3>
                       <div className="grid grid-cols-1 gap-3 sm:gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -596,7 +596,7 @@ const AnnotationTaskTypeManagement: React.FC = () => {
 
         {/* 模板列表标题 */}
         <div className="mb-6">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900">模板配置</h2>
+          <h2 className="text-sm font-medium text-gray-900">模板配置</h2>
         </div>
 
         <div className="space-y-4 sm:space-y-6">
@@ -713,7 +713,7 @@ const AnnotationTaskTypeManagement: React.FC = () => {
           {taskTypes.length === 0 && (
             <div className="text-center py-8 sm:py-12">
               <List className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
-              <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">暂无任务模板</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-2">暂无任务模板</h3>
               <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">创建第一个任务模板</p>
               <Button
                 onClick={() => setShowCreateDialog(true)}
