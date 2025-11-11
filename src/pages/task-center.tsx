@@ -11,6 +11,7 @@ interface Task {
   errorRate: string
   similarity: string
   channel: string
+  dataSources?: Array<{ channel: string; game: string }> // 新增：数据来源列表
   annotators: Array<{
     name: string
     assigned: number
@@ -106,6 +107,26 @@ function generatePeriodicTaskHistory(baseName: string, count: number = 5) {
 // 创建人列表
 const creators = ['charliazhang', 'admin', 'manager', '张三', '李四', '王五']
 
+// 渠道选项（与创建对话框保持一致）
+const channelOptions = [
+  { id: 'enterprise_wechat', name: '企业微信渠道' },
+  { id: 'qq_channel', name: 'QQ甄选渠道' },
+  { id: 'game_sdk', name: '游戏内SDK渠道' },
+  { id: 'mini_program', name: '小程序渠道' }
+]
+
+// 游戏选项（与创建对话框保持一致）
+const gameOptions = [
+  { id: '1197', name: '【SDK3】火影忍者-手游' },
+  { id: '1180', name: '拳皇98终极之战OL' },
+  { id: '1187', name: '英雄杀' },
+  { id: '1191', name: '王者荣耀' },
+  { id: '1194', name: 'CFM穿越火线手游' },
+  { id: '1211', name: '御龙在天手游' },
+  { id: '1217', name: '新剑侠情缘' },
+  { id: '1243', name: '【H5】魂斗罗:归来' }
+]
+
 // 模拟统计数据 - 基于标注类型的统计信息
 const mockTaskStatistics = {
   1: { // 任务ID为1的统计数据
@@ -158,6 +179,13 @@ const mockTasks: Task[] = Array.from({length: 156}, (_, i) => {
   const isPeriodicTask = i % 5 === 0
   const baseName = isPeriodicTask ? `自动质检` : `质检任务${i + 1}`
   
+  // 生成1-3个数据源组合
+  const dataSourceCount = Math.floor(Math.random() * 3) + 1
+  const dataSources = Array.from({length: dataSourceCount}, () => ({
+    channel: channelOptions[Math.floor(Math.random() * channelOptions.length)].name,
+    game: gameOptions[Math.floor(Math.random() * gameOptions.length)].name
+  }))
+  
   const task = {
     id: i + 1,
     name: isPeriodicTask ? `${baseName}${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}` : baseName,
@@ -169,6 +197,7 @@ const mockTasks: Task[] = Array.from({length: 156}, (_, i) => {
     errorRate: (Math.random() * 30).toFixed(1),
     similarity: (Math.random() * 20 + 80).toFixed(1),
     channel: ['企微私人好友', 'QQ私人好友', 'SDK', '游戏内H5', '小程序'][Math.floor(Math.random() * 5)],
+    dataSources: dataSources, // 新增：数据来源列表
     annotators: generateAnnotators(),
     createdAt: new Date(2025, 0, Math.floor(Math.random() * 28) + 1).toLocaleDateString(),
     deadline: new Date(2025, 1, Math.floor(Math.random() * 28) + 1).toLocaleDateString(),
@@ -253,18 +282,29 @@ export default function TaskCenter() {
 
   // 处理任务创建
   const handleTaskCreated = (newTask: any) => {
-    // 为新任务添加创建者信息
-    const taskWithCreator = {
-      ...newTask,
-      creator: 'charliazhang', // 当前用户
-      channel: newTask.config?.filterConfig?.dataSource === 'online' ? '线上拉取' : '手动导入'
+    // 生成数据来源显示文本
+    let dataSources = []
+    if (newTask.config?.onlineConfig?.dataSources) {
+      dataSources = newTask.config.onlineConfig.dataSources.map((ds: any) => {
+        const channel = channelOptions.find(c => c.id === ds.channel)?.name || ds.channel
+        const game = gameOptions.find(g => g.id === ds.gameId)?.name || ds.gameId
+        return { channel, game }
+      })
     }
     
-    console.log('新任务已创建:', taskWithCreator)
-    setTasks(prevTasks => [taskWithCreator, ...prevTasks])
+    // 为新任务添加必要信息
+    const taskWithInfo = {
+      ...newTask,
+      creator: 'charliazhang', // 当前用户
+      dataSources: dataSources, // 数据来源列表
+      taskType: newTask.config?.executionType || 'single'
+    }
+    
+    console.log('新任务已创建:', taskWithInfo)
+    setTasks(prevTasks => [taskWithInfo, ...prevTasks])
     
     // 显示成功提示
-    // 这里可以添加 toast 通知
+    alert(`任务 "${newTask.name}" 创建成功！`)
   }
 
   // 处理周期任务展开/收起
@@ -329,7 +369,10 @@ export default function TaskCenter() {
 
   const handleChangeTaskStatus = (task: any, newStatus: string) => {
     console.log('修改任务状态:', task.id, newStatus)
-    task.status = newStatus
+    setTasks(prevTasks => prevTasks.map(t => 
+      t.id === task.id ? { ...t, status: newStatus } : t
+    ))
+    alert(`任务 "${task.name}" 状态已更新为 ${statusConfig[newStatus as keyof typeof statusConfig].label}`)
   }
 
   const handleViewStats = (task: any) => {
@@ -521,12 +564,26 @@ export default function TaskCenter() {
                   
                   {/* 卡片信息区域 */}
                   <div className="px-6 pb-4 space-y-3">
-                    {/* 渠道信息 */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">渠道</span>
-                      <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">
-                        {task.channel}
-                      </Badge>
+                    {/* 数据来源信息 */}
+                    <div className="flex items-start justify-between">
+                      <span className="text-sm text-gray-500 shrink-0 mt-0.5">数据来源</span>
+                      <div className="flex-1 ml-2">
+                        {task.dataSources && task.dataSources.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 justify-end">
+                            {task.dataSources.map((source, idx) => (
+                              <Badge key={idx} className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-md border border-blue-200">
+                                <span className="font-medium">{source.game}</span>
+                                <span className="mx-1 text-blue-400">+</span>
+                                <span>{source.channel}</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">
+                            {task.channel}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     
                     {/* 标注人员 */}
