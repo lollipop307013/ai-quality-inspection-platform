@@ -23,12 +23,19 @@ export interface AnnotationTaskType {
 // 质检标准数据结构
 export interface QualityStandard {
   id: string
-  name: string
+  code: string // 错误码，格式：#XXYYZZ
+  dimension: string // 维度
+  category: string // 类别
+  subcategory: string // 子类别
+  standard: string // 标准名称
   description: string
-  severity: 'high' | 'medium' | 'low'
-  points: number
-  category: string
-  errorCode: string
+  severity: '高' | '中' | '低'
+  channel?: string // 渠道：微信、QQ、App等
+  gameType?: string // 适用游戏
+  status: '启用' | '禁用'
+  createdAt: string
+  updatedAt: string
+  creator: string
 }
 
 // 任务分配配置
@@ -56,6 +63,18 @@ export interface AnnotationRecord {
 
 
 
+// 标注员提交状态
+export interface AnnotatorSubmission {
+  annotatorId: string
+  annotatorName: string
+  submitted: boolean // 是否已提交
+  submittedAt?: string // 提交时间
+  progress: {
+    total: number
+    completed: number
+  }
+}
+
 // 任务数据结构
 export interface Task {
   id: string
@@ -80,6 +99,7 @@ export interface Task {
     reviewed: number
     remaining: number
   }
+  submissionStatus?: AnnotatorSubmission[] // 标注员提交状态
   deadline: string
   createdAt: string
   updatedAt: string
@@ -119,7 +139,9 @@ interface GlobalState {
   updateQualityStandard: (id: string, updates: Partial<QualityStandard>) => void
   deleteQualityStandard: (id: string) => void
   getQualityStandardsByCategory: (category: string) => QualityStandard[]
+  getQualityStandardsByChannel: (channel?: string) => QualityStandard[] // 按渠道获取
   getAllErrorCodes: () => string[]
+  getErrorCodesByChannel: (channel?: string) => QualityStandard[] // 按渠道获取错误码
 
   // 任务管理
   tasks: Task[]
@@ -144,6 +166,9 @@ interface GlobalState {
   getAnnotationRecordsByData: (taskId: string, dataId: string) => AnnotationRecord[]
   getAnnotationRecordsByAnnotator: (taskId: string, annotatorId: string) => AnnotationRecord[]
 
+  // 标注员提交管理
+  submitTaskByAnnotator: (taskId: string, annotatorId: string, annotatorName: string) => void
+  checkAndCompleteTask: (taskId: string) => void
 
 }
 
@@ -151,8 +176,7 @@ interface GlobalState {
 const initialUser: UserInfo = {
   id: 'user_001',
   name: 'charliazhang',
-  role: 'admin',
-  department: '质检部门'
+  role: 'admin'
 }
 
 // 初始数据
@@ -199,20 +223,87 @@ const initialAnnotationTaskTypes: AnnotationTaskType[] = [
 ]
 
 const initialQualityStandards: QualityStandard[] = [
-  // 回复准确性
-  { id: 'acc_001', name: '信息错误', description: '回复中包含错误的事实信息', severity: 'high', points: 10, category: '回复准确性', errorCode: '#33001' },
-  { id: 'acc_002', name: '理解偏差', description: '对用户问题理解有偏差', severity: 'medium', points: 5, category: '回复准确性', errorCode: '#33002' },
-  { id: 'acc_003', name: '答非所问', description: '回复内容与用户问题不符', severity: 'high', points: 8, category: '回复准确性', errorCode: '#33003' },
-  
-  // 服务态度
-  { id: 'att_001', name: '语气生硬', description: '回复语气过于生硬，缺乏亲和力', severity: 'medium', points: 3, category: '服务态度', errorCode: '#32101' },
-  { id: 'att_002', name: '不够耐心', description: '对用户问题缺乏耐心', severity: 'medium', points: 4, category: '服务态度', errorCode: '#32102' },
-  { id: 'att_003', name: '用词不当', description: '使用不当或不礼貌的词汇', severity: 'high', points: 6, category: '服务态度', errorCode: '#32103' },
-  
-  // 专业能力
-  { id: 'pro_001', name: '专业知识不足', description: '缺乏相关专业知识', severity: 'high', points: 8, category: '专业能力', errorCode: '#31001' },
-  { id: 'pro_002', name: '解决方案不完整', description: '提供的解决方案不够完整', severity: 'medium', points: 5, category: '专业能力', errorCode: '#31002' },
-  { id: 'pro_003', name: '流程指导错误', description: '提供的操作流程有误', severity: 'high', points: 9, category: '专业能力', errorCode: '#31003' }
+  // 对话维度 - 人设一致性
+  { 
+    id: '1', 
+    code: '#010101', 
+    dimension: '对话', 
+    category: '人设一致性', 
+    subcategory: '称谓使用', 
+    standard: '称谓错误', 
+    description: '使用了不符合人设的称谓',
+    severity: '高',
+    channel: '微信',
+    gameType: 'CFM',
+    status: '启用',
+    createdAt: '2025-01-01',
+    updatedAt: '2025-01-01',
+    creator: '管理员'
+  },
+  { 
+    id: '2', 
+    code: '#010102', 
+    dimension: '对话', 
+    category: '人设一致性', 
+    subcategory: '语气风格', 
+    standard: '语气不符', 
+    description: '回复语气与人设设定不符',
+    severity: '中',
+    channel: '微信',
+    gameType: 'CFM',
+    status: '启用',
+    createdAt: '2025-01-01',
+    updatedAt: '2025-01-01',
+    creator: '管理员'
+  },
+  // 业务维度 - 准确性
+  { 
+    id: '3', 
+    code: '#020101', 
+    dimension: '业务', 
+    category: '业务准确性', 
+    subcategory: '信息准确', 
+    standard: '信息错误', 
+    description: '回复中包含错误的业务信息',
+    severity: '高',
+    channel: 'QQ',
+    gameType: 'DNF',
+    status: '启用',
+    createdAt: '2025-01-01',
+    updatedAt: '2025-01-01',
+    creator: '管理员'
+  },
+  { 
+    id: '4', 
+    code: '#020201', 
+    dimension: '业务', 
+    category: '业务流程', 
+    subcategory: '流程指导', 
+    standard: '流程错误', 
+    description: '提供的业务流程指导有误',
+    severity: '高',
+    channel: 'App',
+    gameType: 'LOL',
+    status: '启用',
+    createdAt: '2025-01-01',
+    updatedAt: '2025-01-01',
+    creator: '管理员'
+  },
+  // 技术维度
+  { 
+    id: '5', 
+    code: '#030101', 
+    dimension: '技术', 
+    category: '技术规范', 
+    subcategory: '接口调用', 
+    standard: '接口错误', 
+    description: '接口调用返回错误信息',
+    severity: '高',
+    status: '启用',
+    createdAt: '2025-01-01',
+    updatedAt: '2025-01-01',
+    creator: '管理员'
+  }
 ]
 
 const initialTasks: Task[] = [
@@ -228,6 +319,36 @@ const initialTasks: Task[] = [
       pending: 8,
       remaining: 27
     },
+    submissionStatus: [
+      {
+        annotatorId: 'user_001',
+        annotatorName: 'charliazhang',
+        submitted: false,
+        progress: {
+          total: 58,
+          completed: 23
+        }
+      },
+      {
+        annotatorId: 'user_002',
+        annotatorName: '张三',
+        submitted: true,
+        submittedAt: '2025-08-26T10:30:00Z',
+        progress: {
+          total: 58,
+          completed: 58
+        }
+      },
+      {
+        annotatorId: 'user_003',
+        annotatorName: '李四',
+        submitted: false,
+        progress: {
+          total: 58,
+          completed: 45
+        }
+      }
+    ],
     deadline: '2025-09-05T18:00:00',
     createdAt: '2025-08-20T10:00:00Z',
     updatedAt: '2025-08-25T14:30:00Z'
@@ -244,6 +365,28 @@ const initialTasks: Task[] = [
       pending: 2,
       remaining: 12
     },
+    submissionStatus: [
+      {
+        annotatorId: 'user_004',
+        annotatorName: '王五',
+        submitted: true,
+        submittedAt: '2025-08-27T14:20:00Z',
+        progress: {
+          total: 47,
+          completed: 47
+        }
+      },
+      {
+        annotatorId: 'user_005',
+        annotatorName: '小明',
+        submitted: true,
+        submittedAt: '2025-08-27T16:45:00Z',
+        progress: {
+          total: 47,
+          completed: 47
+        }
+      }
+    ],
     deadline: '2025-09-08T23:59:59',
     createdAt: '2025-08-15T09:00:00Z',
     updatedAt: '2025-08-28T16:45:00Z'
@@ -296,9 +439,27 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
     const state = get()
     return state.qualityStandards.filter(standard => standard.category === category)
   },
+  getQualityStandardsByChannel: (channel) => {
+    const state = get()
+    // 如果没有指定渠道，返回所有标准
+    if (!channel) return state.qualityStandards.filter(s => s.status === '启用')
+    // 返回指定渠道或通用渠道的标准
+    return state.qualityStandards.filter(standard => 
+      standard.status === '启用' && (!standard.channel || standard.channel === channel)
+    )
+  },
   getAllErrorCodes: () => {
     const state = get()
-    return state.qualityStandards.map(standard => standard.errorCode)
+    return state.qualityStandards.map(standard => standard.code)
+  },
+  getErrorCodesByChannel: (channel) => {
+    const state = get()
+    // 如果没有指定渠道，返回所有启用的标准
+    if (!channel) return state.qualityStandards.filter(s => s.status === '启用')
+    // 返回指定渠道或通用渠道的标准
+    return state.qualityStandards.filter(standard => 
+      standard.status === '启用' && (!standard.channel || standard.channel === channel)
+    )
   },
 
   // 任务状态
@@ -360,6 +521,70 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
     )
   },
 
+  // 标注员提交任务
+  submitTaskByAnnotator: (taskId, annotatorId, annotatorName) => {
+    set((state) => {
+      const task = state.tasks.find(t => t.id === taskId)
+      if (!task) return state
+
+      // 初始化 submissionStatus（如果不存在）
+      if (!task.submissionStatus) {
+        task.submissionStatus = []
+      }
+
+      // 查找或创建该标注员的提交状态
+      const existingSubmission = task.submissionStatus.find(s => s.annotatorId === annotatorId)
+      
+      if (existingSubmission) {
+        // 更新已有的提交状态
+        existingSubmission.submitted = true
+        existingSubmission.submittedAt = new Date().toISOString()
+      } else {
+        // 添加新的提交状态
+        task.submissionStatus.push({
+          annotatorId,
+          annotatorName,
+          submitted: true,
+          submittedAt: new Date().toISOString(),
+          progress: {
+            total: task.progress.total,
+            completed: task.progress.completed
+          }
+        })
+      }
+
+      return {
+        tasks: state.tasks.map(t => t.id === taskId ? { ...task } : t)
+      }
+    })
+
+    // 提交后检查是否所有标注员都已提交
+    get().checkAndCompleteTask(taskId)
+  },
+
+  // 检查并自动完成任务
+  checkAndCompleteTask: (taskId) => {
+    set((state) => {
+      const task = state.tasks.find(t => t.id === taskId)
+      if (!task || !task.submissionStatus) return state
+
+      // 检查是否所有标注员都已提交
+      const allSubmitted = task.submissionStatus.every(s => s.submitted)
+
+      if (allSubmitted && task.status !== 'completed') {
+        // 所有标注员都已提交，自动标记任务为完成
+        return {
+          tasks: state.tasks.map(t => 
+            t.id === taskId 
+              ? { ...t, status: 'completed' as const, updatedAt: new Date().toISOString() }
+              : t
+          )
+        }
+      }
+
+      return state
+    })
+  },
 
 }))
 

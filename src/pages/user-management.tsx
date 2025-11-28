@@ -28,7 +28,6 @@ interface InternalEmployee {
   id: string
   rtxAccount: string
   name: string
-  department: string
   groupId: string
   status: 'active' | 'inactive'
   addedAt: string
@@ -40,7 +39,6 @@ interface ExternalAccount {
   username: string
   password: string
   realName: string
-  organization: string
   groupId: string
   status: 'active' | 'inactive'
   createdAt: string
@@ -115,7 +113,6 @@ const UserManagement: React.FC = () => {
       id: '1',
       rtxAccount: 'zhangsan',
       name: '张三',
-      department: '技术部',
       groupId: 'admin',
       status: 'active',
       addedAt: '2025-01-01T00:00:00Z'
@@ -124,7 +121,6 @@ const UserManagement: React.FC = () => {
       id: '2',
       rtxAccount: 'lisi',
       name: '李四',
-      department: '产品部',
       groupId: 'manager',
       status: 'active',
       addedAt: '2025-01-02T00:00:00Z'
@@ -133,7 +129,6 @@ const UserManagement: React.FC = () => {
       id: '3',
       rtxAccount: 'wangwu',
       name: '王五',
-      department: '运营部',
       groupId: 'annotator',
       status: 'active',
       addedAt: '2025-01-03T00:00:00Z'
@@ -144,7 +139,6 @@ const UserManagement: React.FC = () => {
   const [newEmployee, setNewEmployee] = useState({
     rtxAccount: '',
     name: '',
-    department: '',
     groupId: 'annotator'
   })
   const [employeeSearchTerm, setEmployeeSearchTerm] = useState('')
@@ -156,7 +150,6 @@ const UserManagement: React.FC = () => {
       username: 'external001',
       password: '******',
       realName: '赵六',
-      organization: '外包公司A',
       groupId: 'annotator',
       status: 'active',
       createdAt: '2025-01-05T00:00:00Z',
@@ -167,7 +160,6 @@ const UserManagement: React.FC = () => {
       username: 'external002',
       password: '******',
       realName: '孙七',
-      organization: '外包公司B',
       groupId: 'annotator',
       status: 'active',
       createdAt: '2025-01-06T00:00:00Z',
@@ -181,7 +173,6 @@ const UserManagement: React.FC = () => {
     username: '',
     password: '',
     realName: '',
-    organization: '',
     groupId: 'annotator'
   })
   const [accountSearchTerm, setAccountSearchTerm] = useState('')
@@ -274,14 +265,13 @@ const UserManagement: React.FC = () => {
       id: `emp_${Date.now()}`,
       rtxAccount: newEmployee.rtxAccount,
       name: newEmployee.name,
-      department: newEmployee.department,
       groupId: newEmployee.groupId,
       status: 'active',
       addedAt: new Date().toISOString()
     }
 
     setInternalEmployees(prev => [...prev, employee])
-    setNewEmployee({ rtxAccount: '', name: '', department: '', groupId: 'annotator' })
+    setNewEmployee({ rtxAccount: '', name: '', groupId: 'annotator' })
     setShowAddEmployeeDialog(false)
     toast.success('内部员工添加成功')
   }
@@ -301,8 +291,7 @@ const UserManagement: React.FC = () => {
 
   const filteredEmployees = internalEmployees.filter(e => 
     e.rtxAccount.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
-    e.name.toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
-    e.department.toLowerCase().includes(employeeSearchTerm.toLowerCase())
+    e.name.toLowerCase().includes(employeeSearchTerm.toLowerCase())
   )
 
   // ========== 外部账号管理函数 ==========
@@ -323,14 +312,13 @@ const UserManagement: React.FC = () => {
       username: newAccount.username,
       password: newAccount.password,
       realName: newAccount.realName,
-      organization: newAccount.organization,
       groupId: newAccount.groupId,
       status: 'active',
       createdAt: new Date().toISOString()
     }
 
     setExternalAccounts(prev => [...prev, account])
-    setNewAccount({ username: '', password: '', realName: '', organization: '', groupId: 'annotator' })
+    setNewAccount({ username: '', password: '', realName: '', groupId: 'annotator' })
     setShowCreateAccountDialog(false)
     toast.success('外部账号创建成功')
   }
@@ -341,7 +329,6 @@ const UserManagement: React.FC = () => {
       username: account.username,
       password: account.password,
       realName: account.realName,
-      organization: account.organization,
       groupId: account.groupId
     })
     setShowCreateAccountDialog(true)
@@ -357,7 +344,7 @@ const UserManagement: React.FC = () => {
     ))
     
     setEditingAccount(null)
-    setNewAccount({ username: '', password: '', realName: '', organization: '', groupId: 'annotator' })
+    setNewAccount({ username: '', password: '', realName: '', groupId: 'annotator' })
     setShowCreateAccountDialog(false)
     toast.success('外部账号更新成功')
   }
@@ -387,8 +374,7 @@ const UserManagement: React.FC = () => {
 
   const filteredAccounts = externalAccounts.filter(a => 
     a.username.toLowerCase().includes(accountSearchTerm.toLowerCase()) ||
-    a.realName.toLowerCase().includes(accountSearchTerm.toLowerCase()) ||
-    a.organization.toLowerCase().includes(accountSearchTerm.toLowerCase())
+    a.realName.toLowerCase().includes(accountSearchTerm.toLowerCase())
   )
 
   // 获取分组名称
@@ -519,7 +505,7 @@ const UserManagement: React.FC = () => {
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <Input
-                        placeholder="搜索RTX账号、姓名或部门"
+                        placeholder="搜索RTX账号或姓名"
                         value={employeeSearchTerm}
                         onChange={(e) => setEmployeeSearchTerm(e.target.value)}
                         className="pl-10 w-64"
@@ -538,7 +524,6 @@ const UserManagement: React.FC = () => {
                     <TableRow>
                       <TableHead>RTX账号</TableHead>
                       <TableHead>姓名</TableHead>
-                      <TableHead>部门</TableHead>
                       <TableHead>权限分组</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>添加时间</TableHead>
@@ -550,7 +535,6 @@ const UserManagement: React.FC = () => {
                       <TableRow key={employee.id}>
                         <TableCell className="font-medium">{employee.rtxAccount}</TableCell>
                         <TableCell>{employee.name}</TableCell>
-                        <TableCell>{employee.department}</TableCell>
                         <TableCell>
                           <Badge className={getGroupColor(employee.groupId)}>
                             {getGroupName(employee.groupId)}
@@ -611,7 +595,7 @@ const UserManagement: React.FC = () => {
                     </div>
                     <Button onClick={() => {
                       setEditingAccount(null)
-                      setNewAccount({ username: '', password: '', realName: '', organization: '', groupId: 'annotator' })
+                      setNewAccount({ username: '', password: '', realName: '', groupId: 'annotator' })
                       setShowCreateAccountDialog(true)
                     }}>
                       <Plus className="w-4 h-4 mr-2" />
@@ -626,7 +610,6 @@ const UserManagement: React.FC = () => {
                     <TableRow>
                       <TableHead>用户名</TableHead>
                       <TableHead>使用者姓名</TableHead>
-                      <TableHead>所属组织</TableHead>
                       <TableHead>权限分组</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>最后登录</TableHead>
@@ -638,12 +621,6 @@ const UserManagement: React.FC = () => {
                       <TableRow key={account.id}>
                         <TableCell className="font-medium">{account.username}</TableCell>
                         <TableCell>{account.realName}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-gray-400" />
-                            {account.organization}
-                          </div>
-                        </TableCell>
                         <TableCell>
                           <Badge className={getGroupColor(account.groupId)}>
                             {getGroupName(account.groupId)}
@@ -803,15 +780,6 @@ const UserManagement: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="department">部门</Label>
-                <Input
-                  id="department"
-                  placeholder="输入所属部门"
-                  value={newEmployee.department}
-                  onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="employee-group">权限分组</Label>
                 <Select
                   value={newEmployee.groupId}
@@ -878,15 +846,6 @@ const UserManagement: React.FC = () => {
                   placeholder="输入使用者真实姓名"
                   value={newAccount.realName}
                   onChange={(e) => setNewAccount({ ...newAccount, realName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="organization">所属组织</Label>
-                <Input
-                  id="organization"
-                  placeholder="输入所属组织或公司"
-                  value={newAccount.organization}
-                  onChange={(e) => setNewAccount({ ...newAccount, organization: e.target.value })}
                 />
               </div>
               <div className="space-y-2">

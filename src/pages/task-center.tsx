@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import type { AnnotatorSubmission } from '../store/globalStore'
 
 // 定义任务类型接口
 interface Task {
@@ -17,6 +18,7 @@ interface Task {
     assigned: number
     completed: number
   }>
+  submissionStatus?: AnnotatorSubmission[] // 标注员提交状态
   createdAt: string
   deadline: string
   creator: string
@@ -52,7 +54,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Badge } from '../components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
 import TaskCreationDialog from '../components/task-creation-dialog-new.tsx'
@@ -86,7 +88,8 @@ function generatePeriodicTaskHistory(baseName: string, count: number = 5) {
       id: `${baseName}_${i + 1}`,
       name: `${baseName}${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`,
       description: `周期性质检任务 - 第${i + 1}次执行`,
-      status: i === 0 ? 'running' : ['completed', 'paused'][Math.floor(Math.random() * 2)],
+      // 子任务只有 running 和 completed 两种状态
+      status: i === 0 ? 'running' : ['completed', 'running'][Math.floor(Math.random() * 2)],
       totalCount,
       completedCount,
       errorRate: (Math.random() * 30).toFixed(1),
@@ -107,7 +110,7 @@ function generatePeriodicTaskHistory(baseName: string, count: number = 5) {
 // 创建人列表
 const creators = ['charliazhang', 'admin', 'manager', '张三', '李四', '王五']
 
-// 渠道选项（与创建对话框保持一致）
+// 渠道选项（用于数据生成，不在UI中显示）
 const channelOptions = [
   { id: 'enterprise_wechat', name: '企业微信渠道' },
   { id: 'qq_channel', name: 'QQ甄选渠道' },
@@ -115,7 +118,7 @@ const channelOptions = [
   { id: 'mini_program', name: '小程序渠道' }
 ]
 
-// 游戏选项（与创建对话框保持一致）
+// 游戏选项（用于数据生成，不在UI中显示）
 const gameOptions = [
   { id: '1197', name: '【SDK3】火影忍者-手游' },
   { id: '1180', name: '拳皇98终极之战OL' },
@@ -191,7 +194,10 @@ const mockTasks: Task[] = Array.from({length: 156}, (_, i) => {
     name: isPeriodicTask ? `${baseName}${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}` : baseName,
     baseName: isPeriodicTask ? baseName : undefined, // 周期任务的基础名称
     description: isPeriodicTask ? `周期性质检任务` : `这是第${i + 1}个质检任务的描述`,
-    status: ['running', 'completed', 'paused', 'pending'][Math.floor(Math.random() * 4)],
+    // 周期任务总卡片可以是 running/paused/completed，子任务只能是 running/completed
+    status: isPeriodicTask 
+      ? ['running', 'paused', 'completed'][Math.floor(Math.random() * 3)]
+      : ['running', 'completed'][Math.floor(Math.random() * 2)],
     totalCount,
     completedCount,
     errorRate: (Math.random() * 30).toFixed(1),
@@ -216,8 +222,7 @@ const mockTasks: Task[] = Array.from({length: 156}, (_, i) => {
 const statusConfig = {
   running: { label: '进行中', color: 'bg-blue-100 text-blue-800', icon: Play },
   completed: { label: '已完成', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  paused: { label: '已暂停', color: 'bg-yellow-100 text-yellow-800', icon: Pause },
-  pending: { label: '待开始', color: 'bg-gray-100 text-gray-800', icon: Clock }
+  paused: { label: '已暂停', color: 'bg-yellow-100 text-yellow-800', icon: Pause } // 仅用于周期任务总卡片
 }
 
 // 渠道配置
@@ -249,7 +254,6 @@ export default function TaskCenter() {
   const [tasks, setTasks] = useState(mockTasks)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [channelFilter, setChannelFilter] = useState('all')
   const [taskTypeFilter, setTaskTypeFilter] = useState('all')
   const [replyTypeFilter, setReplyTypeFilter] = useState('all')
   const [riskLevelFilter, setRiskLevelFilter] = useState('all')
@@ -269,6 +273,9 @@ export default function TaskCenter() {
   // 创建任务弹窗状态
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [editingTask, setEditingTask] = useState<any>(null)
+  // 标记完成确认对话框状态
+  const [showCompleteConfirmDialog, setShowCompleteConfirmDialog] = useState(false)
+  const [taskToComplete, setTaskToComplete] = useState<any>(null)
 
   // 检测URL参数，自动打开创建任务弹窗
   useEffect(() => {
@@ -345,9 +352,8 @@ export default function TaskCenter() {
                          task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          task.annotators.some(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesStatus = statusFilter === 'all' || task.status === statusFilter
-    const matchesChannel = channelFilter === 'all' || task.channel === channelFilter
     
-    return matchesSearch && matchesStatus && matchesChannel
+    return matchesSearch && matchesStatus
   })
 
   // 分页
@@ -372,7 +378,22 @@ export default function TaskCenter() {
     setTasks(prevTasks => prevTasks.map(t => 
       t.id === task.id ? { ...t, status: newStatus } : t
     ))
-    alert(`任务 "${task.name}" 状态已更新为 ${statusConfig[newStatus as keyof typeof statusConfig].label}`)
+    alert(`任务 \"${task.name}\" 状态已更新为 ${statusConfig[newStatus as keyof typeof statusConfig].label}`)
+  }
+
+  // 处理标记完成（需要二次确认）
+  const handleMarkTaskCompleted = (task: any) => {
+    setTaskToComplete(task)
+    setShowCompleteConfirmDialog(true)
+  }
+
+  // 确认标记完成
+  const confirmMarkCompleted = () => {
+    if (taskToComplete) {
+      handleChangeTaskStatus(taskToComplete, 'completed')
+    }
+    setShowCompleteConfirmDialog(false)
+    setTaskToComplete(null)
   }
 
   const handleViewStats = (task: any) => {
@@ -467,21 +488,6 @@ export default function TaskCenter() {
                 <SelectItem value="running">进行中</SelectItem>
                 <SelectItem value="completed">已完成</SelectItem>
                 <SelectItem value="paused">已暂停</SelectItem>
-                <SelectItem value="pending">待开始</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Select value={channelFilter} onValueChange={setChannelFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="渠道" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部渠道</SelectItem>
-                <SelectItem value="企微私人好友">企微私人好友</SelectItem>
-                <SelectItem value="QQ私人好友">QQ私人好友</SelectItem>
-                <SelectItem value="SDK">SDK</SelectItem>
-                <SelectItem value="游戏内H5">游戏内H5</SelectItem>
-                <SelectItem value="小程序">小程序</SelectItem>
               </SelectContent>
             </Select>
             
@@ -495,8 +501,20 @@ export default function TaskCenter() {
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {currentTasks.map((task) => {
             const StatusIcon = statusConfig[task.status as keyof typeof statusConfig].icon
-            const progress = Math.min(Math.round((task.completedCount / task.totalCount) * 100), 100)
             const isPeriodicTask = task.taskType === 'periodic'
+            
+            // 对于周期任务，使用最新一期（第一个历史记录）的进度
+            let displayProgress, displayTotalCount, displayCompletedCount
+            if (isPeriodicTask && task.periodicHistory && task.periodicHistory.length > 0) {
+              const latestTask = task.periodicHistory[0]
+              displayTotalCount = latestTask.totalCount
+              displayCompletedCount = latestTask.completedCount
+              displayProgress = Math.min(Math.round((latestTask.completedCount / latestTask.totalCount) * 100), 100)
+            } else {
+              displayTotalCount = task.totalCount
+              displayCompletedCount = task.completedCount
+              displayProgress = Math.min(Math.round((task.completedCount / task.totalCount) * 100), 100)
+            }
             
             return (
               <React.Fragment key={task.id}>
@@ -507,9 +525,9 @@ export default function TaskCenter() {
                       : 'bg-white border-gray-100 hover:shadow-md'
                   }`}
                 >
-                  {/* 卡片头部 */}
-                  <div className="p-6 pb-4">
-                    <div className="flex items-start justify-between mb-3">
+                  {/* 卡片头部 - 固定高度 */}
+                  <div className="p-6 pb-3">
+                    <div className="flex items-start justify-between mb-2 h-8">
                       <div 
                         className={`flex items-center space-x-3 ${isPeriodicTask ? 'cursor-pointer hover:bg-blue-100/50 -mx-2 px-2 py-1 rounded-lg transition-colors' : ''}`}
                         onClick={isPeriodicTask ? () => handleTogglePeriodicTask(task.id) : undefined}
@@ -517,7 +535,7 @@ export default function TaskCenter() {
                         {isPeriodicTask && (
                           <FolderOpen className="w-5 h-5 text-blue-600 shrink-0" />
                         )}
-                        <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
+                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-1">
                           {isPeriodicTask ? task.baseName : task.name}
                         </h3>
                         <Badge 
@@ -542,52 +560,69 @@ export default function TaskCenter() {
                       </div>
                     </div>
                     
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-4">{task.description}</p>
+                    {/* 描述 - 固定2行高度 */}
+                    <div className="h-10 mb-2">
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {task.description}
+                        {isPeriodicTask && task.status === 'paused' && ' (暂停期间不会生成新任务)'}
+                      </p>
+                    </div>
                     
-                    {/* 进度条 */}
-                    <div className="space-y-2 mb-4">
+                    {/* 进度条 - 固定高度 */}
+                    <div className="space-y-1 mb-2 h-[52px]">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500 font-medium">完成进度</span>
-                        <span className="font-semibold text-gray-900">{progress}%</span>
+                        <span className="font-semibold text-gray-900">{displayProgress}%</span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
                           className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${progress}%` }}
+                          style={{ width: `${displayProgress}%` }}
                         ></div>
                       </div>
                       <div className="text-xs text-gray-500">
-                        {task.completedCount} / {task.totalCount} 已完成
+                        {displayCompletedCount} / {displayTotalCount} 已完成
                       </div>
                     </div>
                   </div>
                   
-                  {/* 卡片信息区域 */}
-                  <div className="px-6 pb-4 space-y-3">
-                    {/* 数据来源信息 */}
-                    <div className="flex items-start justify-between">
+                  {/* 卡片信息区域 - 每行固定高度 */}
+                  <div className="px-6 pb-3 space-y-3">
+                    {/* 数据来源信息 - 固定高度64px (最多2行 + 省略文字) */}
+                    <div className="flex items-start justify-between gap-3 h-[64px]">
                       <span className="text-sm text-gray-500 shrink-0 mt-0.5">数据来源</span>
-                      <div className="flex-1 ml-2">
+                      <div className="flex-1 min-w-0">
                         {task.dataSources && task.dataSources.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 justify-end">
-                            {task.dataSources.map((source, idx) => (
-                              <Badge key={idx} className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-md border border-blue-200">
-                                <span className="font-medium">{source.game}</span>
-                                <span className="mx-1 text-blue-400">+</span>
-                                <span>{source.channel}</span>
+                          <div className="flex flex-col gap-1.5">
+                            {/* 最多显示前2个数据源 */}
+                            {task.dataSources.slice(0, 2).map((source, idx) => (
+                              <Badge 
+                                key={idx} 
+                                className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-md border border-blue-200 w-full justify-start overflow-hidden h-6"
+                                title={`${source.game} + ${source.channel}`}
+                              >
+                                <span className="font-medium truncate max-w-[60%]">{source.game}</span>
+                                <span className="mx-1 text-blue-400 shrink-0">+</span>
+                                <span className="truncate">{source.channel}</span>
                               </Badge>
                             ))}
+                            {/* 如果有更多数据源，显示省略标识 */}
+                            {task.dataSources.length > 2 && (
+                              <div className="text-xs text-gray-500 text-right h-4">
+                                +{task.dataSources.length - 2} 个数据来源
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">
-                            {task.channel}
+                          <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md w-full justify-start h-6">
+                            <span className="truncate">{task.channel}</span>
                           </Badge>
                         )}
                       </div>
                     </div>
                     
-                    {/* 标注人员 */}
-                    <div className="flex items-center justify-between">
+                    {/* 标注人员 - 固定高度 */}
+                    <div className="flex items-center justify-between h-6">
                       <span className="text-sm text-gray-500">标注人员</span>
                       <div className="flex items-center space-x-2">
                         <div className="flex -space-x-1">
@@ -612,8 +647,8 @@ export default function TaskCenter() {
                       </div>
                     </div>
                     
-                    {/* 创建人信息 */}
-                    <div className="flex items-center justify-between">
+                    {/* 创建人信息 - 固定高度 */}
+                    <div className="flex items-center justify-between h-5">
                       <span className="text-sm text-gray-500">创建人</span>
                       <div className="text-xs text-gray-600 flex items-center space-x-1">
                         <Users className="w-3 h-3" />
@@ -621,8 +656,8 @@ export default function TaskCenter() {
                       </div>
                     </div>
                     
-                    {/* 时间信息 */}
-                    <div className="flex items-center justify-between">
+                    {/* 创建时间 - 固定高度 */}
+                    <div className="flex items-center justify-between h-5">
                       <span className="text-sm text-gray-500">创建时间</span>
                       <div className="text-xs text-gray-600 flex items-center space-x-1">
                         <Calendar className="w-3 h-3" />
@@ -630,7 +665,8 @@ export default function TaskCenter() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center justify-between">
+                    {/* 截止时间 - 固定高度 */}
+                    <div className="flex items-center justify-between h-5">
                       <span className="text-sm text-gray-500">截止时间</span>
                       <div className="text-xs text-gray-600 flex items-center space-x-1">
                         <Clock className="w-3 h-3" />
@@ -642,13 +678,13 @@ export default function TaskCenter() {
                   {/* 卡片底部操作区域 */}
                   <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-400 font-mono">#{task.id}</span>
+                      <div className="flex items-center space-x-2 h-8">
+                        <span className="text-xs text-gray-400 font-mono leading-8">#{task.id}</span>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleViewTaskDetail(task)}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200 h-auto p-1"
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200 h-8 px-2"
                         >
                           <Eye className="w-3 h-3 mr-1" />
                           查看详情
@@ -677,26 +713,31 @@ export default function TaskCenter() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="rounded-xl shadow-lg border-gray-100">
-                            {task.status === 'running' && (
+                            {/* 周期任务支持暂停/继续 */}
+                            {isPeriodicTask && task.status === 'running' && (
                               <DropdownMenuItem onClick={() => handleChangeTaskStatus(task, 'paused')} className="rounded-lg">
                                 <Pause className="w-4 h-4 mr-2" />
                                 暂停任务
                               </DropdownMenuItem>
                             )}
-                            {task.status === 'paused' && (
+                            {isPeriodicTask && task.status === 'paused' && (
                               <DropdownMenuItem onClick={() => handleChangeTaskStatus(task, 'running')} className="rounded-lg">
                                 <Play className="w-4 h-4 mr-2" />
                                 继续任务
                               </DropdownMenuItem>
                             )}
-                            {(task.status === 'running' || task.status === 'paused') && (
-                              <DropdownMenuItem onClick={() => handleChangeTaskStatus(task, 'completed')} className="rounded-lg">
+                            {/* 单次任务和周期任务都支持标记完成 */}
+                            {task.status === 'running' && (
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation()
+                                handleMarkTaskCompleted(task)
+                              }} className="rounded-lg">
                                 <CheckCircle className="w-4 h-4 mr-2" />
                                 标记完成
                               </DropdownMenuItem>
                             )}
 
-                            {isAdmin && (
+                            {isAdmin && task.status !== 'completed' && (
                               <DropdownMenuItem onClick={() => handleEditTaskConfig(task)} className="rounded-lg">
                                 <Settings className="w-4 h-4 mr-2" />
                                 修改配置
@@ -760,19 +801,16 @@ export default function TaskCenter() {
                                 }}
                               >
                                 {/* 卡片头部 - 与外部任务卡片保持一致 */}
-                                <div className="p-6 pb-4">
-                                  <div className="flex items-start justify-between mb-3">
+                                <div className="p-6 pb-3">
+                                  <div className="flex items-start justify-between mb-2 h-8">
                                     <div className="flex items-center space-x-3">
                                       <div className="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded-lg text-sm font-bold">
                                         {index + 1}
                                       </div>
                                       <div>
-                                        <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
+                                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-1">
                                           {historyTask.name}
                                         </h3>
-                                        <Badge variant="outline" className="text-xs px-2 py-1 rounded-md shrink-0 border-gray-200 mt-1">
-                                          历史任务
-                                        </Badge>
                                       </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
@@ -783,10 +821,13 @@ export default function TaskCenter() {
                                     </div>
                                   </div>
                                   
-                                  <p className="text-sm text-gray-600 line-clamp-2 mb-4">{historyTask.description}</p>
+                                  {/* 描述 - 固定2行高度 */}
+                                  <div className="h-10 mb-2">
+                                    <p className="text-sm text-gray-600 line-clamp-2">{historyTask.description}</p>
+                                  </div>
                                   
-                                  {/* 进度条 - 与外部任务卡片保持一致 */}
-                                  <div className="space-y-2 mb-4">
+                                  {/* 进度条 - 固定高度 */}
+                                  <div className="space-y-1 mb-2 h-[52px]">
                                     <div className="flex justify-between text-sm">
                                       <span className="text-gray-500 font-medium">完成进度</span>
                                       <span className="font-semibold text-gray-900">{historyProgress}%</span>
@@ -803,18 +844,18 @@ export default function TaskCenter() {
                                   </div>
                                 </div>
                                 
-                                {/* 卡片信息区域 - 与外部任务卡片保持一致 */}
-                                <div className="px-6 pb-4 space-y-3">
-                                  {/* 渠道信息 */}
-                                  <div className="flex items-center justify-between">
+                                {/* 卡片信息区域 - 每行固定高度 */}
+                                <div className="px-6 pb-3 space-y-3">
+                                  {/* 渠道信息 - 固定高度 */}
+                                  <div className="flex items-center justify-between h-6">
                                     <span className="text-sm text-gray-500">渠道</span>
-                                    <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md">
+                                    <Badge className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-md h-6">
                                       {historyTask.channel}
                                     </Badge>
                                   </div>
                                   
-                                  {/* 标注人员 */}
-                                  <div className="flex items-center justify-between">
+                                  {/* 标注人员 - 固定高度 */}
+                                  <div className="flex items-center justify-between h-6">
                                     <span className="text-sm text-gray-500">标注人员</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="flex -space-x-1">
@@ -839,8 +880,8 @@ export default function TaskCenter() {
                                     </div>
                                   </div>
                                   
-                                  {/* 执行日期 */}
-                                  <div className="flex items-center justify-between">
+                                  {/* 执行日期 - 固定高度 */}
+                                  <div className="flex items-center justify-between h-5">
                                     <span className="text-sm text-gray-500">执行日期</span>
                                     <div className="text-xs text-gray-600 flex items-center space-x-1">
                                       <Calendar className="w-3 h-3" />
@@ -848,8 +889,8 @@ export default function TaskCenter() {
                                     </div>
                                   </div>
                                   
-                                  {/* 截止时间 */}
-                                  <div className="flex items-center justify-between">
+                                  {/* 截止时间 - 固定高度 */}
+                                  <div className="flex items-center justify-between h-5">
                                     <span className="text-sm text-gray-500">截止时间</span>
                                     <div className="text-xs text-gray-600 flex items-center space-x-1">
                                       <Clock className="w-3 h-3" />
@@ -861,90 +902,8 @@ export default function TaskCenter() {
                                 {/* 卡片底部操作区域 - 与外部任务卡片保持一致 */}
                                 <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-xs text-gray-400 font-mono">#{historyTask.id}</span>
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <button className="text-xs text-blue-600 hover:text-blue-700 flex items-center font-medium transition-colors duration-200">
-                                            查看详情 <ChevronDown className="w-3 h-3 ml-1" />
-                                          </button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="start" className="w-80 max-h-96 overflow-y-auto thin-scrollbar rounded-xl shadow-lg border-gray-100">
-                                          <div className="p-4">
-                                            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
-                                              <Users className="w-4 h-4 mr-2 text-blue-600" />
-                                              标注人员详情
-                                            </h4>
-                                            <div className="space-y-3">
-                                              {historyTask.annotators && historyTask.annotators.map((annotator: any, aIndex: number) => {
-                                                const progress = Math.min(Math.round((annotator.completed / annotator.assigned) * 100), 100)
-                                                
-                                                return (
-                                                  <div key={aIndex} className="bg-gray-50 rounded-lg p-3">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                      <div className="flex items-center space-x-2">
-                                                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                                          <span className="text-blue-600 font-semibold text-xs">{annotator.name.charAt(0)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <h5 className="font-medium text-gray-900 text-xs">{annotator.name}</h5>
-                                                        </div>
-                                                      </div>
-                                                      <Badge className="bg-blue-100 text-blue-800 px-2 py-1 text-xs rounded-full">
-                                                        {progress}%
-                                                      </Badge>
-                                                    </div>
-                                                    
-                                                    <div className="space-y-1">
-                                                      <div className="flex justify-between text-xs">
-                                                        <span className="text-gray-600">已分配: {annotator.assigned}</span>
-                                                        <span className="text-green-600">已完成: {annotator.completed}</span>
-                                                      </div>
-                                                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                        <div
-                                                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-1.5 rounded-full transition-all duration-300"
-                                                          style={{ width: `${progress}%` }}
-                                                        ></div>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                            
-                                            {/* 任务详细信息 */}
-                                            <div className="mt-4 pt-3 border-t border-gray-200">
-                                              <h5 className="text-sm font-semibold text-gray-900 mb-2">任务信息</h5>
-                                              <div className="space-y-2 text-xs">
-                                                <div className="flex justify-between">
-                                                  <span className="text-gray-600">Bot ID:</span>
-                                                  <span className="font-mono text-gray-900">{historyTask.botId}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-gray-600">回复类型:</span>
-                                                  <Badge className={`${replyTypeConfig[historyTask.replyType as keyof typeof replyTypeConfig].color} px-2 py-1 text-xs rounded-md`}>
-                                                    {replyTypeConfig[historyTask.replyType as keyof typeof replyTypeConfig].label}
-                                                  </Badge>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-gray-600">风险等级:</span>
-                                                  <Badge className={`${riskLevelConfig[historyTask.riskLevel as keyof typeof riskLevelConfig].color} px-2 py-1 text-xs rounded-md`}>
-                                                    {riskLevelConfig[historyTask.riskLevel as keyof typeof riskLevelConfig].label}
-                                                  </Badge>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-gray-600">错误率:</span>
-                                                  <span className="text-red-600 font-medium">{historyTask.errorRate}%</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                  <span className="text-gray-600">相似度:</span>
-                                                  <span className="text-green-600 font-medium">{historyTask.similarity}%</span>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
+                                    <div className="flex items-center space-x-2 h-8">
+                                      <span className="text-xs text-gray-400 font-mono leading-8">#{historyTask.id}</span>
                                     </div>
                                     
                                     <div className="flex items-center space-x-1">
@@ -966,11 +925,8 @@ export default function TaskCenter() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleViewTaskDetail(historyTask)
-                                        }}
-                                        className="h-8 w-8 p-0 hover:bg-blue-50 rounded-lg"
+                                        onClick={() => handleViewTaskDetail(historyTask)}
+                                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:text-accent-foreground h-8 w-8 p-0 hover:bg-blue-50 rounded-lg"
                                         title="查看详情"
                                       >
                                         <Eye className="w-4 h-4 text-blue-600" />
@@ -983,19 +939,8 @@ export default function TaskCenter() {
                                           </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="rounded-xl shadow-lg border-gray-100">
+                                          {/* 子任务只支持标记完成，不支持暂停 */}
                                           {historyTask.status === 'running' && (
-                                            <DropdownMenuItem onClick={() => handleChangeTaskStatus(historyTask, 'paused')} className="rounded-lg">
-                                              <Pause className="w-4 h-4 mr-2" />
-                                              暂停任务
-                                            </DropdownMenuItem>
-                                          )}
-                                          {historyTask.status === 'paused' && (
-                                            <DropdownMenuItem onClick={() => handleChangeTaskStatus(historyTask, 'running')} className="rounded-lg">
-                                              <Play className="w-4 h-4 mr-2" />
-                                              继续任务
-                                            </DropdownMenuItem>
-                                          )}
-                                          {(historyTask.status === 'running' || historyTask.status === 'paused') && (
                                             <DropdownMenuItem onClick={() => handleChangeTaskStatus(historyTask, 'completed')} className="rounded-lg">
                                               <CheckCircle className="w-4 h-4 mr-2" />
                                               标记完成
@@ -1099,82 +1044,82 @@ export default function TaskCenter() {
         {/* 任务详情弹窗 */}
         <Dialog open={showTaskDetailDialog} onOpenChange={setShowTaskDetailDialog}>
           <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
-            <DialogHeader>
+            <DialogHeader className="pb-3">
               <DialogTitle className="text-sm font-medium flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
+                <BarChart3 className="w-4 h-4 mr-2 text-blue-600" />
                 任务详情 - {selectedTask?.name}
               </DialogTitle>
             </DialogHeader>
             
             {selectedTask && (
-                <div className="flex h-[70vh] gap-6">
+                <div className="flex h-[70vh] gap-4">
                   {/* 左侧：统计信息 */}
                   <div className="flex-1 overflow-y-auto thin-scrollbar">
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
-                          <PieChart className="w-5 h-5 mr-2 text-blue-600" />
+                        <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                          <PieChart className="w-4 h-4 mr-1.5 text-blue-600" />
                           统计信息
                         </h3>
                         
                         {/* 基础统计 */}
-                        <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="grid grid-cols-2 gap-3 mb-4">
                           {/* 根据任务ID显示对应的标注结果统计 - 第一个卡片 */}
                           {mockTaskStatistics[selectedTask.id as keyof typeof mockTaskStatistics] ? (() => {
                             const taskStats = mockTaskStatistics[selectedTask.id as keyof typeof mockTaskStatistics] as TaskStatistics
                             
                             if (taskStats.annotationType === 'error_code') {
                               return (
-                                <div className="bg-red-50 rounded-xl p-4">
+                                <div className="bg-red-50 rounded-lg p-3">
                                   <div className="flex items-center justify-between">
                                     <div>
-                                      <p className="text-sm font-medium text-red-600">高风险率</p>
-                                      <p className="text-xl font-bold text-red-900">{taskStats.statistics.highRiskRate}%</p>
+                                      <p className="text-xs font-medium text-red-600">高风险率</p>
+                                      <p className="text-lg font-bold text-red-900">{taskStats.statistics.highRiskRate}%</p>
                                     </div>
-                                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                      <AlertTriangle className="w-4 h-4 text-red-600" />
                                     </div>
                                   </div>
                                 </div>
                               )
                             } else if (taskStats.annotationType === 'dialogue_quality') {
                               return (
-                                <div className="bg-blue-50 rounded-xl p-4">
+                                <div className="bg-blue-50 rounded-lg p-3">
                                   <div className="flex items-center justify-between">
                                     <div>
-                                      <p className="text-sm font-medium text-blue-600">平均质量</p>
-                                      <p className="text-xl font-bold text-blue-900">{taskStats.statistics.averageQuality}</p>
+                                      <p className="text-xs font-medium text-blue-600">平均质量</p>
+                                      <p className="text-lg font-bold text-blue-900">{taskStats.statistics.averageQuality}</p>
                                     </div>
-                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                      <BarChart3 className="w-5 h-5 text-blue-600" />
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                      <BarChart3 className="w-4 h-4 text-blue-600" />
                                     </div>
                                   </div>
                                 </div>
                               )
                             } else {
                               return (
-                                <div className="bg-blue-50 rounded-xl p-4">
+                                <div className="bg-blue-50 rounded-lg p-3">
                                   <div className="flex items-center justify-between">
                                     <div>
-                                      <p className="text-sm font-medium text-blue-600">已标注</p>
-                                      <p className="text-xl font-bold text-blue-900">{taskStats.statistics.totalAnnotated}</p>
+                                      <p className="text-xs font-medium text-blue-600">已标注</p>
+                                      <p className="text-lg font-bold text-blue-900">{taskStats.statistics.totalAnnotated}</p>
                                     </div>
-                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                      <BarChart3 className="w-5 h-5 text-blue-600" />
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                      <BarChart3 className="w-4 h-4 text-blue-600" />
                                     </div>
                                   </div>
                                 </div>
                               )
                             }
                           })() : (
-                            <div className="bg-blue-50 rounded-xl p-4">
+                            <div className="bg-blue-50 rounded-lg p-3">
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="text-sm font-medium text-blue-600">总数量</p>
-                                  <p className="text-xl font-bold text-blue-900">{(selectedTask as Task).totalCount}</p>
+                                  <p className="text-xs font-medium text-blue-600">总数量</p>
+                                  <p className="text-lg font-bold text-blue-900">{(selectedTask as Task).totalCount}</p>
                                 </div>
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <BarChart3 className="w-5 h-5 text-blue-600" />
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <BarChart3 className="w-4 h-4 text-blue-600" />
                                 </div>
                               </div>
                             </div>
@@ -1187,38 +1132,38 @@ export default function TaskCenter() {
                             if (taskStats.annotationType === 'error_code') {
                               return (
                                 <>
-                                  <div className="bg-green-50 rounded-xl p-4">
+                                  <div className="bg-green-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-green-600">优秀率</p>
-                                        <p className="text-xl font-bold text-green-900">{taskStats.statistics.excellentRate}%</p>
+                                        <p className="text-xs font-medium text-green-600">优秀率</p>
+                                        <p className="text-lg font-bold text-green-900">{taskStats.statistics.excellentRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="bg-emerald-50 rounded-xl p-4">
+                                  <div className="bg-emerald-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-emerald-600">合格率</p>
-                                        <p className="text-xl font-bold text-emerald-900">{taskStats.statistics.qualifiedRate}%</p>
+                                        <p className="text-xs font-medium text-emerald-600">合格率</p>
+                                        <p className="text-lg font-bold text-emerald-900">{taskStats.statistics.qualifiedRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                                        <Target className="w-5 h-5 text-emerald-600" />
+                                      <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                        <Target className="w-4 h-4 text-emerald-600" />
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="bg-purple-50 rounded-xl p-4">
+                                  <div className="bg-purple-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-purple-600">平均分</p>
-                                        <p className="text-xl font-bold text-purple-900">{taskStats.statistics.averageScore}</p>
+                                        <p className="text-xs font-medium text-purple-600">平均分</p>
+                                        <p className="text-lg font-bold text-purple-900">{taskStats.statistics.averageScore}</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                        <BarChart3 className="w-5 h-5 text-purple-600" />
+                                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                        <BarChart3 className="w-4 h-4 text-purple-600" />
                                       </div>
                                     </div>
                                   </div>
@@ -1227,38 +1172,38 @@ export default function TaskCenter() {
                             } else if (taskStats.annotationType === 'dialogue_quality') {
                               return (
                                 <>
-                                  <div className="bg-green-50 rounded-xl p-4">
+                                  <div className="bg-green-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-green-600">优秀率</p>
-                                        <p className="text-xl font-bold text-green-900">{taskStats.statistics.excellentRate}%</p>
+                                        <p className="text-xs font-medium text-green-600">优秀率</p>
+                                        <p className="text-lg font-bold text-green-900">{taskStats.statistics.excellentRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="bg-yellow-50 rounded-xl p-4">
+                                  <div className="bg-yellow-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-yellow-600">良好率</p>
-                                        <p className="text-xl font-bold text-yellow-900">{taskStats.statistics.goodRate}%</p>
+                                        <p className="text-xs font-medium text-yellow-600">良好率</p>
+                                        <p className="text-lg font-bold text-yellow-900">{taskStats.statistics.goodRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                                        <BarChart3 className="w-5 h-5 text-yellow-600" />
+                                      <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                                        <BarChart3 className="w-4 h-4 text-yellow-600" />
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="bg-red-50 rounded-xl p-4">
+                                  <div className="bg-red-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-red-600">较差率</p>
-                                        <p className="text-xl font-bold text-red-900">{taskStats.statistics.poorRate}%</p>
+                                        <p className="text-xs font-medium text-red-600">较差率</p>
+                                        <p className="text-lg font-bold text-red-900">{taskStats.statistics.poorRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                                      <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                        <AlertTriangle className="w-4 h-4 text-red-600" />
                                       </div>
                                     </div>
                                   </div>
@@ -1267,26 +1212,26 @@ export default function TaskCenter() {
                             } else {
                               return (
                                 <>
-                                  <div className="bg-green-50 rounded-xl p-4">
+                                  <div className="bg-green-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-green-600">准确率</p>
-                                        <p className="text-xl font-bold text-green-900">{taskStats.statistics.accuracyRate}%</p>
+                                        <p className="text-xs font-medium text-green-600">准确率</p>
+                                        <p className="text-lg font-bold text-green-900">{taskStats.statistics.accuracyRate}%</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <CheckCircle className="w-4 h-4 text-green-600" />
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="bg-blue-50 rounded-xl p-4">
+                                  <div className="bg-blue-50 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <p className="text-sm font-medium text-blue-600">已标注</p>
-                                        <p className="text-xl font-bold text-blue-900">{taskStats.statistics.totalAnnotated}</p>
+                                        <p className="text-xs font-medium text-blue-600">已标注</p>
+                                        <p className="text-lg font-bold text-blue-900">{taskStats.statistics.totalAnnotated}</p>
                                       </div>
-                                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                        <BarChart3 className="w-5 h-5 text-blue-600" />
+                                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <BarChart3 className="w-4 h-4 text-blue-600" />
                                       </div>
                                     </div>
                                   </div>
@@ -1295,38 +1240,38 @@ export default function TaskCenter() {
                             }
                           })() : (
                             <>
-                              <div className="bg-green-50 rounded-xl p-4">
+                              <div className="bg-green-50 rounded-lg p-3">
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-sm font-medium text-green-600">已完成</p>
-                                    <p className="text-xl font-bold text-green-900">{(selectedTask as Task).completedCount}</p>
+                                    <p className="text-xs font-medium text-green-600">已完成</p>
+                                    <p className="text-lg font-bold text-green-900">{(selectedTask as Task).completedCount}</p>
                                   </div>
-                                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
                                   </div>
                                 </div>
                               </div>
                               
-                              <div className="bg-orange-50 rounded-xl p-4">
+                              <div className="bg-orange-50 rounded-lg p-3">
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-sm font-medium text-orange-600">错误率</p>
-                                    <p className="text-xl font-bold text-orange-900">{(selectedTask as Task).errorRate}%</p>
+                                    <p className="text-xs font-medium text-orange-600">错误率</p>
+                                    <p className="text-lg font-bold text-orange-900">{(selectedTask as Task).errorRate}%</p>
                                   </div>
-                                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                                    <AlertTriangle className="w-5 h-5 text-orange-600" />
+                                  <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                                    <AlertTriangle className="w-4 h-4 text-orange-600" />
                                   </div>
                                 </div>
                               </div>
                               
-                              <div className="bg-purple-50 rounded-xl p-4">
+                              <div className="bg-purple-50 rounded-lg p-3">
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-sm font-medium text-purple-600">相似度</p>
-                                    <p className="text-xl font-bold text-purple-900">{(selectedTask as Task).similarity}%</p>
+                                    <p className="text-xs font-medium text-purple-600">相似度</p>
+                                    <p className="text-lg font-bold text-purple-900">{(selectedTask as Task).similarity}%</p>
                                   </div>
-                                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                    <Target className="w-5 h-5 text-purple-600" />
+                                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                    <Target className="w-4 h-4 text-purple-600" />
                                   </div>
                                 </div>
                               </div>
@@ -1339,31 +1284,106 @@ export default function TaskCenter() {
                   
                   {/* 右侧：人员进度 */}
                   <div className="flex-1 overflow-y-auto thin-scrollbar">
-                    <div className="space-y-6">
+                    <div className="space-y-4">
+                      {/* 提交情况汇总 */}
+                      {(selectedTask as Task).submissionStatus && (selectedTask as Task).submissionStatus!.length > 0 && (
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                          <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                            <CheckCircle className="w-4 h-4 mr-1.5 text-blue-600" />
+                            提交情况
+                          </h3>
+                          
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div className="bg-white/80 rounded-lg p-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-medium text-green-600">已提交</p>
+                                  <p className="text-xl font-bold text-green-900">
+                                    {(selectedTask as Task).submissionStatus!.filter(s => s.submitted).length}
+                                  </p>
+                                </div>
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                  <CheckCircle className="w-5 h-5 text-green-600" />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-white/80 rounded-lg p-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-medium text-orange-600">未提交</p>
+                                  <p className="text-xl font-bold text-orange-900">
+                                    {(selectedTask as Task).submissionStatus!.filter(s => !s.submitted).length}
+                                  </p>
+                                </div>
+                                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                                  <Clock className="w-5 h-5 text-orange-600" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-white/80 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-gray-600">提交进度</span>
+                              <span className="text-sm font-bold text-blue-600">
+                                {Math.round(((selectedTask as Task).submissionStatus!.filter(s => s.submitted).length / (selectedTask as Task).submissionStatus!.length) * 100)}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${((selectedTask as Task).submissionStatus!.filter(s => s.submitted).length / (selectedTask as Task).submissionStatus!.length) * 100}%` 
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
-                          <Users className="w-5 h-5 mr-2 text-green-600" />
+                        <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                          <Users className="w-4 h-4 mr-1.5 text-green-600" />
                           人员进度
                         </h3>
                         
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           {(selectedTask as Task).annotators.map((annotator: any, index: number) => {
                           const progress = Math.min(Math.round((annotator.completed / annotator.assigned) * 100), 100)
                           
+                          // 查找该标注员的提交状态
+                          const submissionStatus = (selectedTask as Task).submissionStatus?.find(
+                            s => s.annotatorName === annotator.name
+                          )
+                          const isSubmitted = submissionStatus?.submitted || false
+                          
                           return (
-                            <div key={index} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
-                                    <span className="text-blue-700 font-bold text-sm">{annotator.name.charAt(0)}</span>
+                            <div key={index} className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center">
+                                    <span className="text-blue-700 font-bold text-xs">{annotator.name.charAt(0)}</span>
                                   </div>
                                   <div>
-                                    <h4 className="font-semibold text-gray-900">{annotator.name}</h4>
-                                    <p className="text-sm text-gray-500">标注人员</p>
+                                    <h4 className="font-semibold text-sm text-gray-900">{annotator.name}</h4>
+                                    <p className="text-xs text-gray-500">标注人员</p>
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className={`text-lg font-bold ${
+                                  {/* 提交状态标识 */}
+                                  {isSubmitted ? (
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <CheckCircle className="w-4 h-4 text-green-500" />
+                                      <span className="text-xs text-green-600 font-medium">已提交</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Clock className="w-4 h-4 text-orange-500" />
+                                      <span className="text-xs text-orange-600 font-medium">未提交</span>
+                                    </div>
+                                  )}
+                                  <div className={`text-base font-bold ${
                                     progress >= 90 ? 'text-green-600' :
                                     progress >= 70 ? 'text-blue-600' :
                                     progress >= 50 ? 'text-yellow-600' : 'text-red-600'
@@ -1374,23 +1394,23 @@ export default function TaskCenter() {
                                 </div>
                               </div>
                               
-                              <div className="space-y-3">
-                                <div className="flex justify-between text-sm">
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-xs">
                                   <span className="text-gray-600">已分配</span>
                                   <span className="font-medium text-gray-900">{annotator.assigned}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
+                                <div className="flex justify-between text-xs">
                                   <span className="text-gray-600">已完成</span>
                                   <span className="font-medium text-green-600">{annotator.completed}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
+                                <div className="flex justify-between text-xs">
                                   <span className="text-gray-600">剩余</span>
                                   <span className="font-medium text-orange-600">{annotator.assigned - annotator.completed}</span>
                                 </div>
                                 
-                                <div className="w-full bg-gray-200 rounded-full h-3 mt-3">
+                                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                                   <div
-                                    className={`h-3 rounded-full transition-all duration-500 ${
+                                    className={`h-2 rounded-full transition-all duration-500 ${
                                       progress >= 90 ? 'bg-gradient-to-r from-green-500 to-green-600' :
                                       progress >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
                                       progress >= 50 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' :
@@ -1415,45 +1435,45 @@ export default function TaskCenter() {
         {/* 统计弹窗 */}
         <Dialog open={showStatsDialog} onOpenChange={setShowStatsDialog}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto thin-scrollbar">
-            <DialogHeader>
-              <DialogTitle>任务统计详情</DialogTitle>
+            <DialogHeader className="pb-3">
+              <DialogTitle className="text-sm font-medium">任务统计详情</DialogTitle>
             </DialogHeader>
             
             {selectedTask && (
-                  <div className="space-y-6 py-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="bg-blue-50 rounded-xl p-6">
+                  <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-blue-50 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-blue-600">总数量</p>
-                            <p className="text-2xl font-bold text-blue-900">{(selectedTask as Task).totalCount}</p>
+                            <p className="text-xs font-medium text-blue-600">总数量</p>
+                            <p className="text-xl font-bold text-blue-900">{(selectedTask as Task).totalCount}</p>
                           </div>
-                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <BarChart3 className="w-6 h-6 text-blue-600" />
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <BarChart3 className="w-5 h-5 text-blue-600" />
                           </div>
                         </div>
                       </div>
                       
-                      <div className="bg-green-50 rounded-xl p-6">
+                      <div className="bg-green-50 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-green-600">已完成</p>
-                            <p className="text-2xl font-bold text-green-900">{(selectedTask as Task).completedCount}</p>
+                            <p className="text-xs font-medium text-green-600">已完成</p>
+                            <p className="text-xl font-bold text-green-900">{(selectedTask as Task).completedCount}</p>
                           </div>
-                          <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-6 h-6 text-green-600" />
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
                           </div>
                         </div>
                       </div>
                       
-                      <div className="bg-orange-50 rounded-xl p-6">
+                      <div className="bg-orange-50 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-orange-600">错误率</p>
-                            <p className="text-2xl font-bold text-orange-900">{(selectedTask as Task).errorRate}%</p>
+                            <p className="text-xs font-medium text-orange-600">错误率</p>
+                            <p className="text-xl font-bold text-orange-900">{(selectedTask as Task).errorRate}%</p>
                           </div>
-                          <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                            <AlertTriangle className="w-6 h-6 text-orange-600" />
+                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                            <AlertTriangle className="w-5 h-5 text-orange-600" />
                           </div>
                         </div>
                       </div>
@@ -1463,66 +1483,66 @@ export default function TaskCenter() {
                 {selectedTask && mockTaskStatistics[selectedTask.id as keyof typeof mockTaskStatistics] && (() => {
                   const taskStats = mockTaskStatistics[selectedTask.id as keyof typeof mockTaskStatistics] as TaskStatistics
                   return (
-                    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-6 border border-slate-200">
-                      <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
-                        <TrendingUp className="w-4 h-4 mr-2 text-indigo-600" />
+                    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-lg p-4 border border-slate-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                        <TrendingUp className="w-4 h-4 mr-1.5 text-indigo-600" />
                         标注质量统计
                       </h4>
                       
                       {taskStats.annotationType === 'error_code' && (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-white/70 p-4 rounded-lg border border-blue-100">
-                            <div className="text-blue-600 font-medium text-sm mb-1">高风险率</div>
-                            <div className="text-blue-900 font-bold text-lg">{taskStats.statistics.highRiskRate}%</div>
-                            <div className="text-blue-500 text-xs mt-1">标注为高风险的比例</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+                            <div className="text-blue-600 font-medium text-xs mb-1">高风险率</div>
+                            <div className="text-blue-900 font-bold text-base">{taskStats.statistics.highRiskRate}%</div>
+                            <div className="text-blue-500 text-xs mt-0.5">标注为高风险的比例</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-green-100">
-                            <div className="text-green-600 font-medium text-sm mb-1">优秀率</div>
-                            <div className="text-green-900 font-bold text-lg">{taskStats.statistics.excellentRate}%</div>
-                            <div className="text-green-500 text-xs mt-1">质量评分优秀的比例</div>
+                          <div className="bg-white/70 p-3 rounded-lg border border-green-100">
+                            <div className="text-green-600 font-medium text-xs mb-1">优秀率</div>
+                            <div className="text-green-900 font-bold text-base">{taskStats.statistics.excellentRate}%</div>
+                            <div className="text-green-500 text-xs mt-0.5">质量评分优秀的比例</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-emerald-100">
-                            <div className="text-emerald-600 font-medium text-sm mb-1">合格率</div>
-                            <div className="text-emerald-900 font-bold text-lg">{taskStats.statistics.qualifiedRate}%</div>
-                            <div className="text-emerald-500 text-xs mt-1">达到合格标准的比例</div>
+                          <div className="bg-white/70 p-3 rounded-lg border border-emerald-100">
+                            <div className="text-emerald-600 font-medium text-xs mb-1">合格率</div>
+                            <div className="text-emerald-900 font-bold text-base">{taskStats.statistics.qualifiedRate}%</div>
+                            <div className="text-emerald-500 text-xs mt-0.5">达到合格标准的比例</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-purple-100">
-                            <div className="text-purple-600 font-medium text-sm mb-1">平均分</div>
-                            <div className="text-purple-900 font-bold text-lg">{taskStats.statistics.averageScore}</div>
-                            <div className="text-purple-500 text-xs mt-1">所有标注的平均质量分</div>
+                          <div className="bg-white/70 p-3 rounded-lg border border-purple-100">
+                            <div className="text-purple-600 font-medium text-xs mb-1">平均分</div>
+                            <div className="text-purple-900 font-bold text-base">{taskStats.statistics.averageScore}</div>
+                            <div className="text-purple-500 text-xs mt-0.5">所有标注的平均质量分</div>
                           </div>
                         </div>
                       )}
                       
                       {taskStats.annotationType === 'dialogue_quality' && (
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="bg-white/70 p-4 rounded-lg border border-green-100">
-                            <div className="text-green-600 font-medium text-sm mb-1">优秀率</div>
-                            <div className="text-green-900 font-bold text-lg">{taskStats.statistics.excellentRate}%</div>
-                            <div className="text-green-500 text-xs mt-1">评为"好"的对话比例</div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="bg-white/70 p-3 rounded-lg border border-green-100">
+                            <div className="text-green-600 font-medium text-xs mb-1">优秀率</div>
+                            <div className="text-green-900 font-bold text-base">{taskStats.statistics.excellentRate}%</div>
+                            <div className="text-green-500 text-xs mt-0.5">评为"好"的对话比例</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-yellow-100">
-                            <div className="text-yellow-600 font-medium text-sm mb-1">良好率</div>
-                            <div className="text-yellow-900 font-bold text-lg">{taskStats.statistics.goodRate}%</div>
-                            <div className="text-yellow-500 text-xs mt-1">评为"中"的对话比例</div>
+                          <div className="bg-white/70 p-3 rounded-lg border border-yellow-100">
+                            <div className="text-yellow-600 font-medium text-xs mb-1">良好率</div>
+                            <div className="text-yellow-900 font-bold text-base">{taskStats.statistics.goodRate}%</div>
+                            <div className="text-yellow-500 text-xs mt-0.5">评为"中"的对话比例</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-red-100">
-                            <div className="text-red-600 font-medium text-sm mb-1">较差率</div>
-                            <div className="text-red-900 font-bold text-lg">{taskStats.statistics.poorRate}%</div>
-                            <div className="text-red-500 text-xs mt-1">评为"差"的对话比例</div>
+                          <div className="bg-white/70 p-3 rounded-lg border border-red-100">
+                            <div className="text-red-600 font-medium text-xs mb-1">较差率</div>
+                            <div className="text-red-900 font-bold text-base">{taskStats.statistics.poorRate}%</div>
+                            <div className="text-red-500 text-xs mt-0.5">评为"差"的对话比例</div>
                           </div>
                         </div>
                       )}
 
                       {taskStats.annotationType === 'message_scene' && (
-                        <div className="space-y-4">
-                          <div className="bg-white/70 p-4 rounded-lg border border-blue-100">
-                            <div className="text-blue-600 font-medium text-sm mb-1">准确率</div>
-                            <div className="text-blue-900 font-bold text-lg">{taskStats.statistics.accuracyRate}%</div>
-                            <div className="text-blue-500 text-xs mt-1">场景分类的准确率</div>
+                        <div className="space-y-3">
+                          <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+                            <div className="text-blue-600 font-medium text-xs mb-1">准确率</div>
+                            <div className="text-blue-900 font-bold text-base">{taskStats.statistics.accuracyRate}%</div>
+                            <div className="text-blue-500 text-xs mt-0.5">场景分类的准确率</div>
                           </div>
-                          <div className="bg-white/70 p-4 rounded-lg border border-gray-100">
-                            <h5 className="text-gray-700 font-medium text-sm mb-3">场景分布</h5>
+                          <div className="bg-white/70 p-3 rounded-lg border border-gray-100">
+                            <h5 className="text-gray-700 font-medium text-xs mb-2">场景分布</h5>
                             <div className="grid grid-cols-3 gap-2">
                               {taskStats.statistics.sceneDistribution && Object.entries(taskStats.statistics.sceneDistribution).map(([scene, count]) => (
                                 <div key={scene} className="text-center">
@@ -1576,7 +1596,31 @@ export default function TaskCenter() {
           </DialogContent>
         </Dialog>
 
-
+        {/* 标记完成确认对话框 */}
+        <Dialog open={showCompleteConfirmDialog} onOpenChange={setShowCompleteConfirmDialog}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>确认标记完成</DialogTitle>
+              <DialogDescription>
+                确定要将任务 <span className="font-semibold text-gray-900">\"{taskToComplete?.name}\"</span> 标记为已完成吗？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex gap-2 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCompleteConfirmDialog(false)}
+              >
+                取消
+              </Button>
+              <Button 
+                onClick={confirmMarkCompleted}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                确认完成
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </div>

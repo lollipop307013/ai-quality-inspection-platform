@@ -9,23 +9,24 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useGlobalStore } from '@/store/globalStore'
 
-// 模拟质检标准数据
-const mockStandards = Array.from({length: 89}, (_, i) => ({
-  id: i + 1,
-  dimension: ['对话', '业务', '技术', '合规'][Math.floor(Math.random() * 4)],
-  category: ['人设一致性', '对话细节维度', '业务准确性', '技术规范'][Math.floor(Math.random() * 4)],
-  subcategory: ['人设相关维度', '对话情绪适配', '业务流程', '接口调用'][Math.floor(Math.random() * 4)],
-  standard: ['称谓', '悠悠人设', '情绪适配', '业务逻辑'][Math.floor(Math.random() * 4)],
-  code: `#${(30000 + i).toString()}`,
-  description: `这是第${i + 1}个质检标准的详细描述`,
-  severity: ['高', '中', '低'][Math.floor(Math.random() * 3)],
-  gameType: ['CFM', 'DNF', 'LOL', 'QQ飞车', '通用'][Math.floor(Math.random() * 5)],
-  status: ['启用', '禁用'][Math.floor(Math.random() * 2)],
-  createdAt: new Date(2025, 0, Math.floor(Math.random() * 28) + 1).toLocaleDateString(),
-  updatedAt: new Date(2025, 0, Math.floor(Math.random() * 28) + 1).toLocaleDateString(),
-  creator: ['管理员', '质检专员', '业务负责人'][Math.floor(Math.random() * 3)]
-}))
+// 维度映射表 - 用于生成错误码
+const dimensionCodeMap: Record<string, string> = {
+  '对话': '01',
+  '业务': '02',
+  '技术': '03',
+  '合规': '04'
+}
+
+// 生成错误码函数
+// 格式: #XXYYZZ (XX=维度, YY=大类, ZZ=小类-错误项序号)
+const generateErrorCode = (dimension: string, categoryIndex: number, subcategoryIndex: number): string => {
+  const dimensionCode = dimensionCodeMap[dimension] || '99'
+  const categoryCode = String(categoryIndex).padStart(2, '0')
+  const subcategoryCode = String(subcategoryIndex).padStart(2, '0')
+  return `#${dimensionCode}${categoryCode}${subcategoryCode}`
+}
 
 const severityConfig = {
   '高': { color: 'bg-red-100 text-red-800' },
@@ -39,17 +40,22 @@ const statusConfig = {
 }
 
 export default function SystemConfiguration() {
+  // 从全局 store 获取质检标准
+  const store = useGlobalStore()
+  const allStandards = store.qualityStandards
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [dimensionFilter, setDimensionFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [gameTypeFilter, setGameTypeFilter] = useState('all')
+  const [channelFilter, setChannelFilter] = useState('all')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedStandard, setSelectedStandard] = useState<any>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  const [selectedItems, setSelectedItems] = useState<number[]>([])
+  const [selectedItems, setSelectedItems] = useState<string[]>([]) // 改为string[]以匹配id类型
   
   // 新标准表单状态
   const [newStandard, setNewStandard] = useState({
@@ -60,12 +66,32 @@ export default function SystemConfiguration() {
     code: '',
     description: '',
     severity: '中',
-    gameType: '通用',
+    channel: '',
+    gameType: '',
     status: '启用'
   })
 
+  // 验证错误码格式
+  const validateErrorCode = (code: string): boolean => {
+    // 格式: #XXYYZZ，其中每部分都是01-99
+    const pattern = /^#([0-9]{2})([0-9]{2})([0-9]{2})$/
+    const match = code.match(pattern)
+    
+    if (!match) return false
+    
+    const [, dim, cat, subcat] = match
+    // 验证每个部分都在01-99范围内
+    const dimNum = parseInt(dim, 10)
+    const catNum = parseInt(cat, 10)
+    const subcatNum = parseInt(subcat, 10)
+    
+    return dimNum >= 1 && dimNum <= 99 && 
+           catNum >= 1 && catNum <= 99 && 
+           subcatNum >= 1 && subcatNum <= 99
+  }
+
   // 过滤和搜索
-  const filteredStandards = mockStandards.filter(standard => {
+  const filteredStandards = allStandards.filter(standard => {
     const matchesSearch = standard.dimension.includes(searchQuery) ||
                          standard.category.includes(searchQuery) ||
                          standard.subcategory.includes(searchQuery) ||
@@ -76,8 +102,9 @@ export default function SystemConfiguration() {
     const matchesSeverity = severityFilter === 'all' || standard.severity === severityFilter
     const matchesStatus = statusFilter === 'all' || standard.status === statusFilter
     const matchesGameType = gameTypeFilter === 'all' || standard.gameType === gameTypeFilter
+    const matchesChannel = channelFilter === 'all' || (!standard.channel || standard.channel === channelFilter)
     
-    return matchesSearch && matchesDimension && matchesSeverity && matchesStatus && matchesGameType
+    return matchesSearch && matchesDimension && matchesSeverity && matchesStatus && matchesGameType && matchesChannel
   })
 
   // 分页
@@ -85,7 +112,24 @@ export default function SystemConfiguration() {
   const currentStandards = filteredStandards.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const handleCreateStandard = () => {
-    console.log('创建质检标准:', newStandard)
+    // 验证错误码格式
+    if (!validateErrorCode(newStandard.code)) {
+      alert('错误码格式不正确！格式应为 #XXYYZZ，其中每个部分为01-99之间的数字，例如：#010101')
+      return
+    }
+    
+    // 添加到 store
+    const newId = `std_${Date.now()}`
+    store.addQualityStandard({
+      id: newId,
+      ...newStandard,
+      severity: newStandard.severity as '高' | '中' | '低',
+      status: newStandard.status as '启用' | '禁用',
+      createdAt: new Date().toLocaleDateString(),
+      updatedAt: new Date().toLocaleDateString(),
+      creator: store.currentUser.name
+    })
+    
     setShowCreateDialog(false)
     // 重置表单
     setNewStandard({
@@ -96,6 +140,7 @@ export default function SystemConfiguration() {
       code: '',
       description: '',
       severity: '中',
+      channel: '',
       gameType: '通用',
       status: '启用'
     })
@@ -148,7 +193,7 @@ export default function SystemConfiguration() {
     }
   }
 
-  const handleSelectItem = (id: number) => {
+  const handleSelectItem = (id: string) => {
     if (selectedItems.includes(id)) {
       setSelectedItems(selectedItems.filter(item => item !== id))
     } else {
@@ -239,8 +284,12 @@ export default function SystemConfiguration() {
                       <Input
                         value={newStandard.code}
                         onChange={(e) => setNewStandard({...newStandard, code: e.target.value})}
-                        placeholder="例如: #33001"
+                        placeholder="格式: #XXYYZZ (维度-大类-小类)"
+                        maxLength={7}
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        格式说明：#XX(维度01-99)YY(大类01-99)ZZ(小类01-99)，例如：#010101
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="severity">严重程度</Label>
@@ -257,15 +306,30 @@ export default function SystemConfiguration() {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="gameType">适用游戏</Label>
-                      <Select value={newStandard.gameType} onValueChange={(value) => setNewStandard({...newStandard, gameType: value})}>
+                      <Label htmlFor="channel">适用渠道</Label>
+                      <Select value={newStandard.channel || ''} onValueChange={(value) => setNewStandard({...newStandard, channel: value})}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="选择渠道(可选)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="通用">通用</SelectItem>
+                          <SelectItem value="">通用</SelectItem>
+                          <SelectItem value="微信">微信</SelectItem>
+                          <SelectItem value="QQ">QQ</SelectItem>
+                          <SelectItem value="App">App</SelectItem>
+                          <SelectItem value="Web">Web</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="gameType">适用游戏</Label>
+                      <Select value={newStandard.gameType || ''} onValueChange={(value) => setNewStandard({...newStandard, gameType: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="选择游戏(可选)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">通用</SelectItem>
                           <SelectItem value="CFM">CFM</SelectItem>
                           <SelectItem value="DNF">DNF</SelectItem>
                           <SelectItem value="LOL">LOL</SelectItem>
@@ -375,6 +439,20 @@ export default function SystemConfiguration() {
                 <SelectItem value="QQ飞车">QQ飞车</SelectItem>
               </SelectContent>
             </Select>
+            
+            <Select value={channelFilter} onValueChange={setChannelFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="渠道" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部渠道</SelectItem>
+                <SelectItem value="企微私人好友">企微私人好友</SelectItem>
+                <SelectItem value="QQ私人好友">QQ私人好友</SelectItem>
+                <SelectItem value="SDK">SDK</SelectItem>
+                <SelectItem value="游戏内H5">游戏内H5</SelectItem>
+                <SelectItem value="小程序">小程序</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
           <div className="flex justify-between items-center">
@@ -413,7 +491,6 @@ export default function SystemConfiguration() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">标准层级</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">严重程度</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">适用范围</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">更新信息</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -456,12 +533,6 @@ export default function SystemConfiguration() {
                     <td className="px-6 py-4">
                       <Badge className={severityConfig[standard.severity as keyof typeof severityConfig].color}>
                         {standard.severity}
-                      </Badge>
-                    </td>
-                    
-                    <td className="px-6 py-4">
-                      <Badge variant="outline" className="text-xs">
-                        {standard.gameType}
                       </Badge>
                     </td>
                     
@@ -622,8 +693,12 @@ export default function SystemConfiguration() {
                   <Input
                     value={newStandard.code}
                     onChange={(e) => setNewStandard({...newStandard, code: e.target.value})}
-                    placeholder="例如: #33001"
+                    placeholder="格式: #XXYYZZ (维度-大类-小类)"
+                    maxLength={7}
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    格式说明：#XX(维度01-99)YY(大类01-99)ZZ(小类01-99)，例如：#010101
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="edit-severity">严重程度</Label>
@@ -640,15 +715,30 @@ export default function SystemConfiguration() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="edit-gameType">适用游戏</Label>
-                  <Select value={newStandard.gameType} onValueChange={(value) => setNewStandard({...newStandard, gameType: value})}>
+                  <Label htmlFor="edit-channel">适用渠道</Label>
+                  <Select value={newStandard.channel || ''} onValueChange={(value) => setNewStandard({...newStandard, channel: value})}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="选择渠道(可选)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="通用">通用</SelectItem>
+                      <SelectItem value="">通用</SelectItem>
+                      <SelectItem value="微信">微信</SelectItem>
+                      <SelectItem value="QQ">QQ</SelectItem>
+                      <SelectItem value="App">App</SelectItem>
+                      <SelectItem value="Web">Web</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit-gameType">适用游戏</Label>
+                  <Select value={newStandard.gameType || ''} onValueChange={(value) => setNewStandard({...newStandard, gameType: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择游戏(可选)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">通用</SelectItem>
                       <SelectItem value="CFM">CFM</SelectItem>
                       <SelectItem value="DNF">DNF</SelectItem>
                       <SelectItem value="LOL">LOL</SelectItem>

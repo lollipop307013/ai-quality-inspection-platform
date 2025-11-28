@@ -98,12 +98,12 @@ const initialTaskHierarchy = {
 }
 
 const mockConversation = [
-  { id: 1, sender: 'user', content: '你好，我想了解一下CFM游戏的最新活动', timestamp: '14:30', date: '2025-01-27', openid: 'user_12345' },
-  { id: 2, sender: 'ai', content: '你好呀！最近CFM确实有很多精彩活动呢～本小姐来给你详细介绍一下吧！', timestamp: '14:30', date: '2025-01-27', replyType: 'MQA' },
-  { id: 3, sender: 'user', content: '好的，谢谢', timestamp: '14:31', date: '2025-01-27', openid: 'user_12345' },
-  { id: 4, sender: 'ai', content: '不客气哦～有什么其他问题随时问本小姐！', timestamp: '14:31', date: '2025-01-27', replyType: 'LLM' },
-  { id: 5, sender: 'user', content: '还有其他活动吗？', timestamp: '09:15', date: '2025-01-28', openid: 'user_12345' },
-  { id: 6, sender: 'ai', content: '当然有啦！还有很多精彩活动等着你呢！', timestamp: '09:16', date: '2025-01-28', replyType: '人工客服' }
+  { id: 1, sender: 'user', content: '你好，我想了解一下CFM游戏的最新活动', timestamp: '14:30', date: '2025-01-27', openid: 'user_12345', channel: '微信' },
+  { id: 2, sender: 'ai', content: '你好呀！最近CFM确实有很多精彩活动呢～本小姐来给你详细介绍一下吧！', timestamp: '14:30', date: '2025-01-27', replyType: 'MQA', channel: '微信' },
+  { id: 3, sender: 'user', content: '好的，谢谢', timestamp: '14:31', date: '2025-01-27', openid: 'user_12345', channel: '微信' },
+  { id: 4, sender: 'ai', content: '不客气哦～有什么其他问题随时问本小姐！', timestamp: '14:31', date: '2025-01-27', replyType: 'LLM', channel: '微信' },
+  { id: 5, sender: 'user', content: '还有其他活动吗？', timestamp: '09:15', date: '2025-01-28', openid: 'user_12345', channel: '微信' },
+  { id: 6, sender: 'ai', content: '当然有啦！还有很多精彩活动等着你呢！', timestamp: '09:16', date: '2025-01-28', replyType: '人工客服', channel: '微信' }
 ]
 
 // 知识参考数据
@@ -375,11 +375,7 @@ const mockAnnotationTypeHistoricalData: Record<string, any[]> = {
   ]
 }
 
-const mockStandards = [
-  { id: 1, dimension: '对话', category: '人设一致性', subcategory: '人设相关维度', standard: '称谓', code: '#33001', description: '自称错误' },
-  { id: 2, dimension: '对话', category: '人设一致性', subcategory: '人设相关维度', standard: '悠悠人设', code: '#33003', description: '承认自己是AI' },
-  { id: 3, dimension: '对话', category: '对话细节维度', subcategory: '对话情绪适配', standard: '情绪适配', code: '#32101', description: '语气词使用不符合场景' }
-]
+// 质检标准现在从全局 store 中读取，不再使用本地 mock 数据
 
 // 圆形点阵列表组件
 const CircleDotList = ({ items, onItemClick, currentItemId }: { 
@@ -503,6 +499,9 @@ export default function AnnotationWorkbench() {
   const [showQuickApply, setShowQuickApply] = useState(false)
   const [hasAnnotated, setHasAnnotated] = useState(false)
   const [isPending, setIsPending] = useState(false)
+  
+  // 提交确认弹窗状态
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
   
   // 相似会话选中状态 - 与当前标注保持一致
   const [selectedSimilarForSync, setSelectedSimilarForSync] = useState<number[]>([])
@@ -999,6 +998,24 @@ export default function AnnotationWorkbench() {
     toast.success(`已应用标注值：${value || '无'}`)
   }
 
+  // 处理确认提交标注结果
+  const handleConfirmSubmit = () => {
+    const currentUser = store.currentUser
+    const taskId = 'task_001' // 这里应该根据实际情况获取任务ID
+    
+    // 调用store方法提交任务
+    store.submitTaskByAnnotator(taskId, currentUser.id, currentUser.name)
+    
+    toast.success('太棒了！标注结果已提交成功！')
+    setShowSubmitConfirm(false)
+  }
+
+  // 处理取消提交
+  const handleCancelSubmit = () => {
+    setShowSubmitConfirm(false)
+    toast.info('您可以稍后再提交标注结果')
+  }
+
 
 
   // 相似会话同步处理函数
@@ -1062,7 +1079,15 @@ export default function AnnotationWorkbench() {
   }
 
   // 数据处理
-  const filteredStandards = mockStandards.filter(standard =>
+  // 获取当前消息的渠道
+  const currentMessage = mockConversation.find(msg => msg.id === selectedMessageId)
+  const currentChannel = currentMessage?.channel
+  
+  // 从 store 获取质检标准，并根据渠道筛选
+  const allStandards = store.getErrorCodesByChannel(currentChannel)
+  
+  // 根据搜索关键词过滤
+  const filteredStandards = allStandards.filter(standard =>
     standard.dimension.includes(searchQuery) ||
     standard.category.includes(searchQuery) ||
     standard.subcategory.includes(searchQuery) ||
@@ -1116,6 +1141,26 @@ export default function AnnotationWorkbench() {
   
   // 当前任务配置
   const currentTask = taskInfo
+
+  // 监听进度变化，当达到100%时弹出确认提交弹窗
+  React.useEffect(() => {
+    if (taskInfo && taskInfo.progress === 100 && taskInfo.remaining === 0) {
+      // 检查是否已经提交过
+      const currentUser = store.currentUser
+      const taskId = 'task_001' // 这里应该根据实际情况获取任务ID
+      
+      // 从任务状态中查找当前用户的提交状态
+      const task = store.tasks.find(t => t.id === taskId)
+      const hasSubmitted = task?.submissionStatus?.find(
+        s => s.annotatorId === currentUser.id
+      )?.submitted
+      
+      // 如果还没有提交过，弹出确认弹窗
+      if (!hasSubmitted) {
+        setShowSubmitConfirm(true)
+      }
+    }
+  }, [taskInfo?.progress, taskInfo?.remaining, store])
 
   // 相似会话分页处理
   const getCurrentGroupConversations = () => {
@@ -2806,6 +2851,68 @@ export default function AnnotationWorkbench() {
             <Button onClick={confirmJump} className="bg-blue-600 hover:bg-blue-700">
               <ExternalLink className="w-4 h-4 mr-2" />
               确认跳转
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 提交确认弹窗 */}
+      <Dialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-center flex items-center justify-center gap-2">
+              <CheckCircle className="w-6 h-6 text-green-500" />
+              <span>恭喜完成！</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-4">
+            <div className="text-center">
+              <p className="text-lg font-medium text-gray-800 mb-2">
+                太棒了！当前标注任务已经全部完成了~
+              </p>
+              <p className="text-sm text-gray-600">
+                是否确认提交标注结果？
+              </p>
+            </div>
+
+            {taskInfo && (
+              <div className="bg-blue-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">任务名称：</span>
+                  <span className="font-medium text-gray-800">{taskInfo.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">已完成：</span>
+                  <span className="font-medium text-green-600">{taskInfo.completed} / {taskInfo.total}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">完成进度：</span>
+                  <span className="font-medium text-green-600">{taskInfo.progress}%</span>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs text-yellow-800">
+                💡 提交后，您的标注结果将被保存。当所有标注员都提交后，任务将自动标记为完成状态。
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={handleCancelSubmit}
+              className="flex-1"
+            >
+              稍后提交
+            </Button>
+            <Button
+              onClick={handleConfirmSubmit}
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              确认提交
             </Button>
           </div>
         </DialogContent>

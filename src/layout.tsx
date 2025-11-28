@@ -343,16 +343,7 @@ export default function Layout({ children }: LayoutProps) {
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <select className="border border-gray-300 rounded px-3 py-1 text-sm">
-                <option>穿越火线 (1197)</option>
-                <option>王者荣耀 (2341)</option>
-                <option>和平精英 (1856)</option>
-              </select>
-              <select className="border border-gray-300 rounded px-3 py-1 text-sm">
-                <option>腾讯QQ渠道</option>
-                <option>微信渠道</option>
-                <option>官网渠道</option>
-              </select>
+              {/* 游戏和渠道筛选器已移除，仅在质检标准配置页面保留 */}
             </div>
             <div className="flex items-center space-x-4">
               {/* 通知图标 */}

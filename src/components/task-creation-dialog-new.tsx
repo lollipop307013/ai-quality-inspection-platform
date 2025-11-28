@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Calendar } from './ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
-import { CalendarIcon, Plus, Settings, CheckCircle, AlertCircle, X } from 'lucide-react'
+import { CalendarIcon, Plus, CheckCircle, AlertCircle, X } from 'lucide-react'
 import { format } from 'date-fns'
 
 // 简单的 className 合并函数
@@ -42,6 +42,7 @@ export default function TaskCreationDialog({
 
   // Step1：任务基本信息
   const [taskName, setTaskName] = useState('')
+  const [autoAddTimeTag, setAutoAddTimeTag] = useState(false) // 自动增加时间标识
   const [taskDescription, setTaskDescription] = useState('')
   const [dataType, setDataType] = useState<'dialogue'>('dialogue') // 一期仅支持对话质检
   
@@ -57,6 +58,8 @@ export default function TaskCreationDialog({
     database: '', // 数据库选择
     dataSources: [] as Array<{ channel: string; gameId: string }>, // 数据组合
     taskQuantity: 0, // 会话数量（选填）
+    keywords: '' as string, // 关键词过滤
+    filterRules: [] as string[] // 规则过滤
   })
   
   // 周期任务配置
@@ -75,13 +78,7 @@ export default function TaskCreationDialog({
     endDate: undefined as Date | undefined
   })
   
-  // Step4：任务分配
-  const [assignmentConfig, setAssignmentConfig] = useState({
-    annotationType: 'cross' as 'cross' | 'distributed',
-    allocationMethod: 'quota' as 'quota' | 'average',
-    annotators: [] as string[],
-    quotaConfig: {} as Record<string, number>
-  })
+
 
   // 模拟数据
   const databaseOptions = [
@@ -115,22 +112,14 @@ export default function TaskCreationDialog({
     }
   ]
 
-  const annotatorOptions = [
-    { id: 'user1', name: '张三', role: '高级质检员', workload: 85 },
-    { id: 'user2', name: '李四', role: '质检员', workload: 72 },
-    { id: 'user3', name: '王五', role: '质检员', workload: 68 },
-    { id: 'user4', name: '赵六', role: '初级质检员', workload: 45 }
-  ]
-
   const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
   // 步骤配置
   const steps = [
-    { id: 'basic', title: '选择数据类型', description: '选择数据类型，填写描述' },
-    { id: 'annotation-types', title: '选择标注项', description: '一期仅提供错误码标注类别' },
-    { id: 'data-source', title: '选择数据来源', description: '数据库导入或手动导入' },
-    { id: 'assignment', title: '人员分配', description: '标注人员选择和分配方式' },
-    { id: 'preview', title: '最终预览', description: '确认任务配置信息' }
+    { id: 'basic', title: '基本信息配置', description: '填写任务名称、描述等基本信息' },
+    { id: 'annotation-types', title: '标注项目配置', description: '选择需要的标注字段' },
+    { id: 'data-source', title: '数据来源配置', description: '配置数据源和任务频次' },
+    { id: 'preview', title: '确认与创建', description: '最终预览并创建任务' }
   ]
 
   // 处理函数
@@ -148,11 +137,11 @@ export default function TaskCreationDialog({
 
   const canProceedToNext = () => {
     switch (currentStep) {
-      case 0: // Step1：选择数据类型，填写描述
+      case 0: // Step1：基本信息配置
         return taskName.trim() !== '' && dataType !== ''
-      case 1: // Step2：选择标注项
+      case 1: // Step2：标注项目配置
         return selectedAnnotationTypes.length > 0
-      case 2: // Step3：选择数据来源
+      case 2: // Step3：数据来源配置
         if (dataSource === 'online') {
           // 必须选择数据库
           if (!onlineConfig.database) return false
@@ -180,9 +169,7 @@ export default function TaskCreationDialog({
           // 手动导入暂不支持（一期）
           return false
         }
-      case 3: // Step4：人员分配
-        return assignmentConfig.annotators.length > 0
-      case 4: // Step5：最终预览
+      case 3: // Step4：确认与创建
         return true
       default:
         return true
@@ -197,19 +184,7 @@ export default function TaskCreationDialog({
     }
   }
 
-  const handleAnnotatorChange = (annotatorId: string, checked: boolean) => {
-    if (checked) {
-      setAssignmentConfig({
-        ...assignmentConfig,
-        annotators: [...assignmentConfig.annotators, annotatorId]
-      })
-    } else {
-      setAssignmentConfig({
-        ...assignmentConfig,
-        annotators: assignmentConfig.annotators.filter(id => id !== annotatorId)
-      })
-    }
-  }
+
 
   // 计算某个星期几可以配置的最大数据范围（单向回溯，避免重叠）
   const getMaxDataRangeForWeekday = (weekday: number) => {
@@ -282,88 +257,44 @@ export default function TaskCreationDialog({
     setOnlineConfig({ ...onlineConfig, dataSources: newSources })
   }
 
-  const generateConfigPreview = () => {
-    let description = ""
-    
-    if (taskName) {
-      description += `将创建名为"${taskName}"的质检任务`
-    } else {
-      description += "将创建一个新的标注任务"
-    }
-    
-    if (executionType === 'single') {
-      description += "，单次执行"
-    } else if (executionType === 'periodic') {
-      description += "，周期执行"
-    }
-    
-    if (selectedAnnotationTypes.length > 0) {
-      const typeNames = selectedAnnotationTypes.map(typeId => {
-        const type = availableAnnotationTypes.find(t => t.id === typeId)
-        return type?.name
-      }).filter(Boolean).join('、')
-      description += `。将进行${typeNames}等标注`
-    }
-    
-    if (dataSource === 'online' && onlineConfig.dataSources.length > 0) {
-      description += `。数据来源：${onlineConfig.dataSources.length}组数据源组合`
-      if (onlineConfig.taskQuantity && onlineConfig.taskQuantity > 0) {
-        description += `，共${onlineConfig.taskQuantity}条会话`
-      }
-    }
-    
-    if (assignmentConfig.annotators.length > 0) {
-      description += `。分配给${assignmentConfig.annotators.length}位标注员`
-      if (assignmentConfig.annotationType === 'cross') {
-        description += "进行交叉标注"
-      } else {
-        description += "进行分散标注"
-      }
-    }
-    
-    if (taskDescription) {
-      description += `。任务要求：${taskDescription}`
-    }
-    
-    if (description && !description.endsWith('。')) {
-      description += "。"
-    }
-    
-    return description || "您的所有配置将在此处生成预览"
-  }
+
 
   const handleSubmit = () => {
     const taskQuantity = onlineConfig.taskQuantity || 100
     
+    // 生成最终任务名称（如果开启了时间标识）
+    let finalTaskName = taskName
+    if (autoAddTimeTag) {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      finalTaskName = `${taskName}${year}${month}${day}`
+    }
+    
     const newTask = {
       id: Date.now(),
-      name: taskName,
+      name: finalTaskName,
       description: taskDescription || `这是一个${executionType === 'periodic' ? '周期性' : '单次'}质检任务`,
       status: 'pending',
       totalCount: taskQuantity,
       completedCount: 0,
       errorRate: '0.0',
       similarity: '100.0',
-      annotators: assignmentConfig.annotators.map(id => {
-        const annotator = annotatorOptions.find(a => a.id === id)
-        return {
-          name: annotator?.name || id,
-          assigned: Math.floor(taskQuantity / assignmentConfig.annotators.length),
-          completed: 0
-        }
-      }),
+      annotators: [],
       createdAt: new Date().toLocaleDateString(),
       deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString(),
       taskType: executionType,
       config: {
         dataType,
+        taskName,
+        autoAddTimeTag,
         executionType,
         dataSource,
         onlineConfig,
         periodicConfig,
         singleTimeRange,
-        selectedAnnotationTypes,
-        assignmentConfig
+        selectedAnnotationTypes
       }
     }
     
@@ -382,6 +313,7 @@ export default function TaskCreationDialog({
   const resetForm = () => {
     setCurrentStep(0)
     setTaskName('')
+    setAutoAddTimeTag(false)
     setTaskDescription('')
     setDataType('dialogue')
     setExecutionType('single')
@@ -389,7 +321,9 @@ export default function TaskCreationDialog({
     setOnlineConfig({
       database: '',
       dataSources: [],
-      taskQuantity: 0
+      taskQuantity: 0,
+      keywords: '',
+      filterRules: []
     })
     setPeriodicConfig({
       startDate: undefined,
@@ -404,12 +338,6 @@ export default function TaskCreationDialog({
       endDate: undefined
     })
     setSelectedAnnotationTypes([])
-    setAssignmentConfig({
-      annotationType: 'cross',
-      allocationMethod: 'quota',
-      annotators: [],
-      quotaConfig: {}
-    })
   }
 
   return (
@@ -417,7 +345,22 @@ export default function TaskCreationDialog({
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <style>{`
+          .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+          }
+          .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+          }
+          .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
         <DialogHeader>
           <DialogTitle className="text-sm font-medium flex items-center">
             <Plus className="w-5 h-5 mr-2" />
@@ -425,8 +368,8 @@ export default function TaskCreationDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* 步骤指示器 */}
-        <div className="flex items-center justify-between mb-6">
+        {/* 步骤指示器 - 固定在顶部 */}
+        <div className="flex items-center justify-between mb-4 pb-4 border-b sticky top-0 bg-white z-10">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center">
               <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
@@ -455,23 +398,27 @@ export default function TaskCreationDialog({
           ))}
         </div>
 
-        {/* 步骤内容 */}
-        <div className="min-h-[500px]">
-          {/* Step1：选择数据类型，填写描述 */}
+        {/* 步骤内容 - 可滚动区域 */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-[500px] pr-2">
+          {/* Step1：基本信息配置 */}
           {currentStep === 0 && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Step1：选择数据类型，填写描述</CardTitle>
+                  <CardTitle className="text-lg font-semibold">第1步：基本信息配置</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="task-name">任务名称 *</Label>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label htmlFor="task-name">任务名称 *</Label>
+                      <span className="text-xs text-gray-500">{taskName.length}/30</span>
+                    </div>
                     <Input
                       id="task-name"
                       value={taskName}
-                      onChange={(e) => setTaskName(e.target.value)}
-                      placeholder="请输入任务名称"
+                      onChange={(e) => setTaskName(e.target.value.slice(0, 30))}
+                      placeholder="请输入任务名称（最多30个字符）"
+                      maxLength={30}
                     />
                   </div>
 
@@ -486,55 +433,70 @@ export default function TaskCreationDialog({
                       </SelectContent>
                     </Select>
                     <p className="text-sm text-gray-500 mt-1">
-                      *一期仅支持对话标注
+                      一期仅支持对话标注，不可配置
                     </p>
                   </div>
 
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div>
+                      <Label htmlFor="auto-time-tag" className="font-medium text-gray-700">自动增加时间标识</Label>
+                      <p className="text-sm text-gray-600 mt-1">开启后，在生成新任务时，会在任务名后自动增加年月日后缀，适合周期任务</p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <button
+                        id="auto-time-tag"
+                        onClick={() => setAutoAddTimeTag(!autoAddTimeTag)}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                          autoAddTimeTag ? 'bg-blue-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                            autoAddTimeTag ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
-                    <Label htmlFor="task-description">任务描述（选填）</Label>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label htmlFor="task-description">任务描述（选填）</Label>
+                      <span className="text-xs text-gray-500">{taskDescription.length}/500</span>
+                    </div>
                     <Textarea
                       id="task-description"
                       value={taskDescription}
-                      onChange={(e) => setTaskDescription(e.target.value)}
-                      placeholder="请描述任务的具体要求和目标（可选）"
+                      onChange={(e) => setTaskDescription(e.target.value.slice(0, 500))}
+                      placeholder="请描述任务的标注目标和要求（最多500个字符）"
                       rows={3}
+                      maxLength={500}
                     />
                   </div>
                 </CardContent>
               </Card>
-              
-              {/* 配置预览 */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="flex items-center mb-2">
-                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
-                  <h3 className="font-semibold text-blue-800">配置预览</h3>
-                </div>
-                <p className="text-sm text-blue-700 leading-relaxed">
-                  {generateConfigPreview()}
-                </p>
-              </div>
             </div>
           )}
 
-          {/* Step2：选择标注项 */}
+          {/* Step2：标注项目配置 */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Step2：选择标注项</CardTitle>
+                  <CardTitle className="text-lg font-semibold">第2步：标注项目配置</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label>标注项选择 *</Label>
+                    <Label>选择所需的标注字段 *</Label>
                     <p className="text-sm text-gray-600 mt-1 mb-4">
-                      一期仅提供错误码标注类别，后续支持任务模板快速配置
+                      本期仅支持错误码标注（卡片式选择，校验至少需要选择一类。一期仅提供错误码标注，不可配置）
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {availableAnnotationTypes.map((type) => (
                         <div 
                           key={type.id} 
-                          className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
                             selectedAnnotationTypes.includes(type.id) 
                               ? 'border-blue-500 bg-blue-50' 
                               : 'border-gray-200 hover:border-gray-300'
@@ -547,8 +509,9 @@ export default function TaskCreationDialog({
                                 <Checkbox
                                   checked={selectedAnnotationTypes.includes(type.id)}
                                   onChange={() => {}} // 由父级div的onClick处理
+                                  className="w-5 h-5"
                                 />
-                                <h4 className="font-medium text-gray-900">{type.name}</h4>
+                                <h4 className="font-semibold text-gray-900">{type.name}</h4>
                               </div>
                               <p className="text-sm text-gray-600 mt-2">{type.description}</p>
                             </div>
@@ -574,26 +537,15 @@ export default function TaskCreationDialog({
                   </div>
                 </CardContent>
               </Card>
-              
-              {/* 配置预览 */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="flex items-center mb-2">
-                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
-                  <h3 className="font-semibold text-blue-800">配置预览</h3>
-                </div>
-                <p className="text-sm text-blue-700 leading-relaxed">
-                  {generateConfigPreview()}
-                </p>
-              </div>
             </div>
           )}
 
-          {/* Step3：选择数据来源 */}
+          {/* Step3：数据来源配置 */}
           {currentStep === 2 && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Step3：选择数据来源</CardTitle>
+                  <CardTitle className="text-lg font-semibold">第3步：数据来源配置</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -980,163 +932,139 @@ export default function TaskCreationDialog({
                           </div>
                         )}
 
-                        {/* 会话数量（选填） */}
-                        <div>
-                          <Label htmlFor="task-quantity">会话数量（选填）</Label>
-                          <Input
-                            id="task-quantity"
-                            type="number"
-                            min="0"
-                            value={onlineConfig.taskQuantity || ''}
-                            onChange={(e) => setOnlineConfig({
-                              ...onlineConfig,
-                              taskQuantity: parseInt(e.target.value) || 0
-                            })}
-                            placeholder="不填写则拉取全部数据"
-                            className="mt-2"
-                          />
+                        {/* 数据筛选（可选）*/}
+                        <div className="border-t pt-4">
+                          <h4 className="text-base font-semibold text-gray-900 mb-4">数据筛选（可选）</h4>
+                          
+                          {/* 会话数量 */}
+                          <div className="mb-4">
+                            <Label htmlFor="task-quantity">会话数量</Label>
+                            <Input
+                              id="task-quantity"
+                              type="number"
+                              min="0"
+                              value={onlineConfig.taskQuantity || ''}
+                              onChange={(e) => setOnlineConfig({
+                                ...onlineConfig,
+                                taskQuantity: parseInt(e.target.value) || 0
+                              })}
+                              placeholder="配置每次拉取的最大会话数量，超出则随机抽取"
+                              className="mt-2"
+                            />
+                            <p className="text-sm text-gray-500 mt-1">
+                              如果可用数量超过此值，则随机抽取一部分生成
+                            </p>
+                          </div>
+                          
+                          {/* 关键词过滤 */}
+                          <div className="mb-4">
+                            <Label htmlFor="keywords-filter">关键词过滤</Label>
+                            <Textarea
+                              id="keywords-filter"
+                              value={onlineConfig.keywords}
+                              onChange={(e) => setOnlineConfig({
+                                ...onlineConfig,
+                                keywords: e.target.value
+                              })}
+                              placeholder="输入过滤关键词（每行一个）&#10;例如：悠悠0210"
+                              rows={3}
+                              className="mt-2"
+                            />
+                            <p className="text-sm text-gray-500 mt-1">
+                              若拉取数据中包含关键词，则过滤掉整个会话
+                            </p>
+                          </div>
+                          
+                          {/* 规则过滤 */}
+                          <div>
+                            <Label>规则过滤</Label>
+                            <p className="text-sm text-gray-600 mt-1 mb-3">
+                              用于过滤掉无效标注样本
+                            </p>
+                            
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <Checkbox 
+                                  id="rule-no-bot-reply"
+                                  checked={onlineConfig.filterRules.includes('no_bot_reply')}
+                                  onChange={(e) => {
+                                    const newRules = e.target.checked
+                                      ? [...onlineConfig.filterRules, 'no_bot_reply']
+                                      : onlineConfig.filterRules.filter(r => r !== 'no_bot_reply')
+                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                                <div className="flex-1">
+                                  <Label htmlFor="rule-no-bot-reply" className="font-medium text-gray-700 cursor-pointer">
+                                    无Bot回复
+                                  </Label>
+                                  <p className="text-xs text-gray-600 mt-0.5">
+                                    过滤掉仅存在玩家提问，无Bot回应的会话
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <Checkbox 
+                                  id="rule-pure-push"
+                                  checked={onlineConfig.filterRules.includes('pure_push')}
+                                  onChange={(e) => {
+                                    const newRules = e.target.checked
+                                      ? [...onlineConfig.filterRules, 'pure_push']
+                                      : onlineConfig.filterRules.filter(r => r !== 'pure_push')
+                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                                <div className="flex-1">
+                                  <Label htmlFor="rule-pure-push" className="font-medium text-gray-700 cursor-pointer">
+                                    纯推送消息
+                                  </Label>
+                                  <p className="text-xs text-gray-600 mt-0.5">
+                                    过滤纯Bot推送消息（会话中只存在bot(push)的sender_type）
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <Checkbox 
+                                  id="rule-pure-image"
+                                  checked={onlineConfig.filterRules.includes('pure_image')}
+                                  onChange={(e) => {
+                                    const newRules = e.target.checked
+                                      ? [...onlineConfig.filterRules, 'pure_image']
+                                      : onlineConfig.filterRules.filter(r => r !== 'pure_image')
+                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                                <div className="flex-1">
+                                  <Label htmlFor="rule-pure-image" className="font-medium text-gray-700 cursor-pointer">
+                                    纯图片会话
+                                  </Label>
+                                  <p className="text-xs text-gray-600 mt-0.5">
+                                    会话中玩家发言仅包含图片类型的消息
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
                   )}
                 </CardContent>
               </Card>
-              
-              {/* 配置预览 */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="flex items-center mb-2">
-                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
-                  <h3 className="font-semibold text-blue-800">配置预览</h3>
-                </div>
-                <p className="text-sm text-blue-700 leading-relaxed">
-                  {generateConfigPreview()}
-                </p>
-              </div>
             </div>
           )}
 
-          {/* Step4：人员分配 */}
+          {/* Step4：确认与创建 */}
           {currentStep === 3 && (
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Step4：人员分配</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>选择标注人员 *</Label>
-                    <p className="text-sm text-gray-600 mt-1 mb-4">
-                      从权限管理分组的标注人员列表中勾选，最终创建的任务会出现在被选中的标注师任务列表中
-                    </p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {annotatorOptions.map((annotator) => (
-                        <div 
-                          key={annotator.id} 
-                          className={`border rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
-                            assignmentConfig.annotators.includes(annotator.id) 
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          onClick={() => handleAnnotatorChange(annotator.id, !assignmentConfig.annotators.includes(annotator.id))}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                              <Checkbox
-                                checked={assignmentConfig.annotators.includes(annotator.id)}
-                                onChange={() => {}} // 由父级div的onClick处理
-                              />
-                              <div>
-                                <h4 className="font-medium text-gray-900">{annotator.name}</h4>
-                                <p className="text-sm text-gray-600">{annotator.role}</p>
-                                <p className="text-xs text-gray-500">当前工作量: {annotator.workload}%</p>
-                              </div>
-                            </div>
-                            
-                            {assignmentConfig.annotators.includes(annotator.id) && (
-                              <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {assignmentConfig.annotators.length === 0 && (
-                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <div className="flex items-center">
-                          <AlertCircle className="w-4 h-4 mr-2 text-amber-600" />
-                          <span className="text-sm text-amber-800">
-                            请至少选择一位标注人员
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 分配方式选择 */}
-                  {assignmentConfig.annotators.length >= 2 && (
-                    <div className="pt-4 border-t border-gray-200">
-                      <Label>分配方式 *</Label>
-                      <p className="text-sm text-gray-600 mt-1 mb-4">
-                        当标注师≥2名时，需要选择分配形式
-                      </p>
-                      
-                      <RadioGroup 
-                        value={assignmentConfig.annotationType} 
-                        onValueChange={(value: 'cross' | 'distributed') => setAssignmentConfig({
-                          ...assignmentConfig, 
-                          annotationType: value
-                        })}
-                        className="space-y-4"
-                      >
-                        <div className="flex items-start space-x-3">
-                          <RadioGroupItem value="cross" id="cross-annotation" className="mt-1" />
-                          <div className="flex-1">
-                            <Label htmlFor="cross-annotation" className="font-medium">
-                              交叉标注
-                            </Label>
-                            <p className="text-sm text-gray-600 mt-1">
-                              多人标注同一数据
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-start space-x-3">
-                          <RadioGroupItem value="distributed" id="distributed-annotation" className="mt-1" />
-                          <div className="flex-1">
-                            <Label htmlFor="distributed-annotation" className="font-medium">
-                              分散标注
-                            </Label>
-                            <p className="text-sm text-gray-600 mt-1">
-                              不同人标注，瓜分整份数据
-                            </p>
-                          </div>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              
-              {/* 配置预览 */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="flex items-center mb-2">
-                  <Settings className="w-4 h-4 mr-2 text-blue-600" />
-                  <h3 className="font-semibold text-blue-800">配置预览</h3>
-                </div>
-                <p className="text-sm text-blue-700 leading-relaxed">
-                  {generateConfigPreview()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Step5：最终预览 */}
-          {currentStep === 4 && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Step5：最终预览</CardTitle>
+                  <CardTitle className="text-lg font-semibold">第4步：确认与创建</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
@@ -1186,21 +1114,23 @@ export default function TaskCreationDialog({
                         </div>
                       )}
                       
-                      <div className="flex">
-                        <span className="font-medium text-gray-700 w-32">标注人员：</span>
-                        <span className="text-gray-900">
-                          {assignmentConfig.annotators.map(id => 
-                            annotatorOptions.find(a => a.id === id)?.name
-                          ).join('、')} 
-                          ({assignmentConfig.annotators.length}人)
-                        </span>
-                      </div>
-                      
-                      {assignmentConfig.annotators.length >= 2 && (
+                      {onlineConfig.keywords && (
                         <div className="flex">
-                          <span className="font-medium text-gray-700 w-32">分配方式：</span>
+                          <span className="font-medium text-gray-700 w-32">关键词过滤：</span>
+                          <span className="text-gray-900 whitespace-pre-wrap">{onlineConfig.keywords}</span>
+                        </div>
+                      )}
+                      
+                      {onlineConfig.filterRules.length > 0 && (
+                        <div className="flex">
+                          <span className="font-medium text-gray-700 w-32">规则过滤：</span>
                           <span className="text-gray-900">
-                            {assignmentConfig.annotationType === 'cross' ? '交叉标注' : '分散标注'}
+                            {onlineConfig.filterRules.map(rule => {
+                              if (rule === 'no_bot_reply') return '无Bot回复'
+                              if (rule === 'pure_push') return '纯推送消息'
+                              if (rule === 'pure_image') return '纯图片会话'
+                              return rule
+                            }).join('、')}
                           </span>
                         </div>
                       )}
@@ -1221,8 +1151,8 @@ export default function TaskCreationDialog({
           )}
         </div>
 
-        {/* 底部按钮 */}
-        <div className="flex justify-between pt-4 border-t">
+        {/* 底部按钮 - 固定在底部 */}
+        <div className="flex justify-between pt-4 border-t mt-4 flex-shrink-0">
           <Button
             variant="outline"
             onClick={prevStep}
