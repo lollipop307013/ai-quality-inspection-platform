@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 
 export default defineConfig({
   plugins: [react()],
-  base: '/',
+  base: '/ai-quality-inspection-platform/',
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
