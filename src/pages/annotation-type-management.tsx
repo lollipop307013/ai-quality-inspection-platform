@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Plus, Edit, Trash2, Save, X, Settings, ExternalLink, BarChart3, Calculator, Target, Database } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Edit, Trash2, Save, X, Settings, ExternalLink, BarChart3, Target, Database } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { useGlobalStore } from '../store/globalStore'
 import { useNavigate } from 'react-router-dom'
 
 // 预定义的标注类型
@@ -19,6 +18,7 @@ const initialAnnotationTypes = [
     description: '对对话中的错误进行分类标注，使用#错误码格式',
     options: ['#12345', '#12346', '#12347', '#12348', '#12349', '#12350', '#12351', '#12352'],
     type: 'searchable_select',
+    selectionMode: 'single',
     color: 'bg-red-100 text-red-800',
     isSystem: true,
     searchable: true
@@ -29,6 +29,7 @@ const initialAnnotationTypes = [
     description: '对消息场景进行分类',
     options: ['闲聊', '攻略', '消费', '投诉', '咨询', '其他'],
     type: 'select',
+    selectionMode: 'single',
     color: 'bg-blue-100 text-blue-800',
     isSystem: true
   },
@@ -38,6 +39,7 @@ const initialAnnotationTypes = [
     description: '评估人设对话的质量',
     options: ['好', '中', '差'],
     type: 'select',
+    selectionMode: 'single',
     color: 'bg-green-100 text-green-800',
     isSystem: true
   },
@@ -47,6 +49,7 @@ const initialAnnotationTypes = [
     description: '分析对话的情感倾向',
     options: ['正面', '中性', '负面'],
     type: 'select',
+    selectionMode: 'single',
     color: 'bg-purple-100 text-purple-800',
     isSystem: true
   }
@@ -90,6 +93,7 @@ type AnnotationType = {
   description: string;
   options: string[];
   type: 'select' | 'text';
+  selectionMode?: 'single' | 'multiple'; // 单选或多选，仅当type为'select'时有效
   color: string;
   isSystem: boolean;
 }
@@ -207,13 +211,6 @@ export default function AnnotationTypeManagement() {
     toast.info('正在跳转到质检标准配置页面')
   }
 
-  const updateAnnotationType = (id: string, updates: Partial<AnnotationType>) => {
-    setAnnotationTypes(annotationTypes.map(type =>
-      type.id === id ? { ...type, ...updates } : type
-    ))
-    toast.success('标注类型更新成功')
-  }
-
   const deleteAnnotationType = (id: string) => {
     const type = annotationTypes.find(t => t.id === id)
     if (type?.isSystem) {
@@ -222,22 +219,6 @@ export default function AnnotationTypeManagement() {
     }
     setAnnotationTypes(annotationTypes.filter(type => type.id !== id))
     toast.success('标注类型删除成功')
-  }
-
-  const addOption = (typeId: string, option: string) => {
-    if (!option.trim()) return
-    
-    updateAnnotationType(typeId, {
-      options: [...(annotationTypes.find(t => t.id === typeId)?.options || []), option.trim()]
-    })
-  }
-
-  const removeOption = (typeId: string, optionIndex: number) => {
-    const type = annotationTypes.find(t => t.id === typeId)
-    if (!type) return
-    
-    const newOptions = type.options.filter((_, index) => index !== optionIndex)
-    updateAnnotationType(typeId, { options: newOptions })
   }
 
   // 处理打开统计规则配置
@@ -414,6 +395,20 @@ export default function AnnotationTypeManagement() {
                   </div>
                   {newType.type === 'select' && (
                     <div className="space-y-2">
+                      <Label htmlFor="selectionMode">选择方式</Label>
+                      <select
+                        id="selectionMode"
+                        value={newType.selectionMode || 'single'}
+                        onChange={(e) => setNewType({ ...newType, selectionMode: e.target.value as 'single' | 'multiple' })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="single">单选</option>
+                        <option value="multiple">多选</option>
+                      </select>
+                    </div>
+                  )}
+                  {newType.type === 'select' && (
+                    <div className="space-y-2">
                       <Label>选项配置</Label>
                       <div className="space-y-2">
                         {(newType.options || []).map((option, index) => (
@@ -436,7 +431,7 @@ export default function AnnotationTypeManagement() {
                         <div className="flex items-center space-x-2">
                           <Input
                             placeholder="输入新选项"
-                            onKeyPress={(e) => {
+                            onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 const value = (e.target as HTMLInputElement).value.trim()
                                 if (value) {
@@ -624,7 +619,7 @@ export default function AnnotationTypeManagement() {
                   <div className="flex items-center space-x-2">
                     <Input
                       placeholder="输入新选项"
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           const value = (e.target as HTMLInputElement).value.trim()
                           if (value && editingType) {

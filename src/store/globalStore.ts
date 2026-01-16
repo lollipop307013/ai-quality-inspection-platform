@@ -38,6 +38,30 @@ export interface QualityStandard {
   creator: string
 }
 
+// 分类定义说明数据结构
+export interface CategoryDefinition {
+  id: string
+  gameId: string // 游戏ID
+  channel: string // 渠道
+  level: 'dimension' | 'category' | 'subcategory' | 'standard' // 定义层级
+  dimension: string // 维度
+  category?: string // 大类（level >= category 时需要）
+  subcategory?: string // 小类（level >= subcategory 时需要）
+  standard?: string // 标准（level = standard 时需要）
+  definition: string // 定义说明内容
+  createdAt: string
+  updatedAt: string
+  creator: string
+}
+
+// 游戏渠道配置
+export interface GameChannelConfig {
+  gameId: string
+  gameName: string
+  channel: string
+  channelName: string
+}
+
 // 任务分配配置
 export interface AssignmentConfig {
   annotationType: 'cross' | 'distributed' // 交叉标注 | 分散标注
@@ -142,6 +166,20 @@ interface GlobalState {
   getQualityStandardsByChannel: (channel?: string) => QualityStandard[] // 按渠道获取
   getAllErrorCodes: () => string[]
   getErrorCodesByChannel: (channel?: string) => QualityStandard[] // 按渠道获取错误码
+
+  // 分类定义说明
+  categoryDefinitions: CategoryDefinition[]
+  setCategoryDefinitions: (definitions: CategoryDefinition[]) => void
+  addCategoryDefinition: (definition: CategoryDefinition) => void
+  updateCategoryDefinition: (id: string, updates: Partial<CategoryDefinition>) => void
+  deleteCategoryDefinition: (id: string) => void
+  getCategoryDefinition: (gameId: string, channel: string, level: CategoryDefinition['level'], dimension: string, category?: string, subcategory?: string, standard?: string) => CategoryDefinition | undefined
+
+  // 游戏渠道配置
+  gameChannelConfigs: GameChannelConfig[]
+  setGameChannelConfigs: (configs: GameChannelConfig[]) => void
+  addGameChannelConfig: (config: GameChannelConfig) => void
+  deleteGameChannelConfig: (gameId: string, channel: string) => void
 
   // 任务管理
   tasks: Task[]
@@ -461,6 +499,51 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
       standard.status === '启用' && (!standard.channel || standard.channel === channel)
     )
   },
+
+  // 分类定义说明状态
+  categoryDefinitions: [],
+  setCategoryDefinitions: (definitions) => set({ categoryDefinitions: definitions }),
+  addCategoryDefinition: (definition) => set((state) => ({
+    categoryDefinitions: [...state.categoryDefinitions, definition]
+  })),
+  updateCategoryDefinition: (id, updates) => set((state) => ({
+    categoryDefinitions: state.categoryDefinitions.map(def =>
+      def.id === id ? { ...def, ...updates, updatedAt: new Date().toISOString() } : def
+    )
+  })),
+  deleteCategoryDefinition: (id) => set((state) => ({
+    categoryDefinitions: state.categoryDefinitions.filter(def => def.id !== id)
+  })),
+  getCategoryDefinition: (gameId, channel, level, dimension, category, subcategory, standard) => {
+    const state = get()
+    return state.categoryDefinitions.find(def => {
+      if (def.gameId !== gameId || def.channel !== channel || def.level !== level || def.dimension !== dimension) {
+        return false
+      }
+      if (level === 'dimension') return true
+      if (def.category !== category) return false
+      if (level === 'category') return true
+      if (def.subcategory !== subcategory) return false
+      if (level === 'subcategory') return true
+      return def.standard === standard
+    })
+  },
+
+  // 游戏渠道配置状态
+  gameChannelConfigs: [
+    { gameId: 'CFM', gameName: '穿越火线手游', channel: 'weixin', channelName: '微信' },
+    { gameId: 'CFM', gameName: '穿越火线手游', channel: 'qq', channelName: 'QQ' },
+    { gameId: 'DNF', gameName: '地下城与勇士', channel: 'qq', channelName: 'QQ' },
+    { gameId: 'LOL', gameName: '英雄联盟', channel: 'weixin', channelName: '微信' },
+    { gameId: 'LOL', gameName: '英雄联盟', channel: 'qq', channelName: 'QQ' },
+  ],
+  setGameChannelConfigs: (configs) => set({ gameChannelConfigs: configs }),
+  addGameChannelConfig: (config) => set((state) => ({
+    gameChannelConfigs: [...state.gameChannelConfigs, config]
+  })),
+  deleteGameChannelConfig: (gameId, channel) => set((state) => ({
+    gameChannelConfigs: state.gameChannelConfigs.filter(c => !(c.gameId === gameId && c.channel === channel))
+  })),
 
   // 任务状态
   tasks: initialTasks,
