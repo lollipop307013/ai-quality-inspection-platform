@@ -410,31 +410,194 @@ export default function SystemConfiguration() {
     }
   }
 
+  // 获取大类定义说明
+  const getCategoryDefinitionText = (dimension: string, category: string) => {
+    return getDefinition('category', dimension, category)?.definition || ''
+  }
+
+  // 获取小类定义说明
+  const getSubcategoryDefinitionText = (dimension: string, category: string, subcategory: string) => {
+    return getDefinition('subcategory', dimension, category, subcategory)?.definition || ''
+  }
+
+  // CSV转义处理
+  const escapeCSV = (value: string) => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
+  }
+
+  // 导出为Excel/CSV格式（新增大类定义说明、小类定义说明两列）
   const handleExportStandards = () => {
-    const dataStr = JSON.stringify(allStandards, null, 2)
-    const blob = new Blob([dataStr], { type: 'application/json' })
+    // CSV表头
+    const headers = [
+      '维度', '大类', '大类定义说明', '小类', '小类定义说明', 
+      '标准', '错误码', '描述', '严重程度', '状态'
+    ]
+    
+    // 生成CSV数据行
+    const rows = allStandards.map(item => [
+      escapeCSV(item.dimension),
+      escapeCSV(item.category),
+      escapeCSV(getCategoryDefinitionText(item.dimension, item.category)),
+      escapeCSV(item.subcategory),
+      escapeCSV(getSubcategoryDefinitionText(item.dimension, item.category, item.subcategory)),
+      escapeCSV(item.standard),
+      escapeCSV(item.code),
+      escapeCSV(item.description),
+      escapeCSV(item.severity),
+      escapeCSV(item.status)
+    ])
+    
+    // 添加BOM以支持Excel正确识别UTF-8
+    const BOM = '\uFEFF'
+    const csvContent = BOM + [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'quality-standards.json'
+    a.download = 'quality-standards.csv'
     a.click()
     URL.revokeObjectURL(url)
   }
 
+  // 导入CSV/Excel格式（支持大类定义说明、小类定义说明两列）
   const handleImportStandards = () => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.json'
+    input.accept = '.csv,.json'
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (file) {
         const reader = new FileReader()
         reader.onload = (event) => {
           try {
-            const data = JSON.parse(event.target?.result as string)
-            if (Array.isArray(data)) {
-              store.setQualityStandards(data)
-              alert('导入成功！')
+            const content = event.target?.result as string
+            
+            // 判断文件类型
+            if (file.name.endsWith('.json')) {
+              // JSON格式（兼容旧格式）
+              const data = JSON.parse(content)
+              if (Array.isArray(data)) {
+                store.setQualityStandards(data)
+                alert('导入成功！')
+              }
+            } else {
+              // CSV格式
+              const lines = content.replace(/^\uFEFF/, '').split('\n').filter(line => line.trim())
+              if (lines.length < 2) {
+                alert('CSV文件格式错误：缺少数据行')
+                return
+              }
+              
+              // 解析表头
+              const headers = parseCSVLine(lines[0])
+              const dimensionIdx = headers.indexOf('维度')
+              const categoryIdx = headers.indexOf('大类')
+              const categoryDefIdx = headers.indexOf('大类定义说明')
+              const subcategoryIdx = headers.indexOf('小类')
+              const subcategoryDefIdx = headers.indexOf('小类定义说明')
+              const standardIdx = headers.indexOf('标准')
+              const codeIdx = headers.indexOf('错误码')
+              const descIdx = headers.indexOf('描述')
+              const severityIdx = headers.indexOf('严重程度')
+              const statusIdx = headers.indexOf('状态')
+              
+              if (dimensionIdx === -1 || categoryIdx === -1 || subcategoryIdx === -1) {
+                alert('CSV文件格式错误：缺少必要列（维度、大类、小类）')
+                return
+              }
+              
+              // 解析数据行
+              const standards: QualityStandard[] = []
+              const categoryDefs: Map<string, string> = new Map() // key: dimension|category
+              const subcategoryDefs: Map<string, string> = new Map() // key: dimension|category|subcategory
+              
+              for (let i = 1; i < lines.length; i++) {
+                const values = parseCSVLine(lines[i])
+                if (values.length < 3) continue
+                
+                const dimension = values[dimensionIdx] || ''
+                const category = values[categoryIdx] || ''
+                const subcategory = values[subcategoryIdx] || ''
+                
+                // 收集定义说明
+                if (categoryDefIdx !== -1 && values[categoryDefIdx]) {
+                  const key = `${dimension}|${category}`
+                  if (!categoryDefs.has(key)) {
+                    categoryDefs.set(key, values[categoryDefIdx])
+                  }
+                }
+                if (subcategoryDefIdx !== -1 && values[subcategoryDefIdx]) {
+                  const key = `${dimension}|${category}|${subcategory}`
+                  if (!subcategoryDefs.has(key)) {
+                    subcategoryDefs.set(key, values[subcategoryDefIdx])
+                  }
+                }
+                
+                // 构建质检标准数据
+                standards.push({
+                  id: `imported-${Date.now()}-${i}`,
+                  dimension,
+                  category,
+                  subcategory,
+                  standard: standardIdx !== -1 ? values[standardIdx] || '' : '',
+                  code: codeIdx !== -1 ? values[codeIdx] || '' : '',
+                  description: descIdx !== -1 ? values[descIdx] || '' : '',
+                  severity: (severityIdx !== -1 ? values[severityIdx] : '中') as '高' | '中' | '低',
+                  status: (statusIdx !== -1 ? values[statusIdx] : '启用') as '启用' | '禁用',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  creator: 'import'
+                })
+              }
+              
+              // 导入质检标准
+              store.setQualityStandards(standards)
+              
+              // 导入定义说明
+              categoryDefs.forEach((definition, key) => {
+                const [dimension, category] = key.split('|')
+                const existing = getDefinition('category', dimension, category)
+                if (!existing) {
+                  store.addCategoryDefinition({
+                    id: `def-${Date.now()}-${Math.random()}`,
+                    gameId: selectedGameId,
+                    channel: selectedChannel,
+                    level: 'category',
+                    dimension,
+                    category,
+                    definition,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    creator: 'import'
+                  })
+                }
+              })
+              
+              subcategoryDefs.forEach((definition, key) => {
+                const [dimension, category, subcategory] = key.split('|')
+                const existing = getDefinition('subcategory', dimension, category, subcategory)
+                if (!existing) {
+                  store.addCategoryDefinition({
+                    id: `def-${Date.now()}-${Math.random()}`,
+                    gameId: selectedGameId,
+                    channel: selectedChannel,
+                    level: 'subcategory',
+                    dimension,
+                    category,
+                    subcategory,
+                    definition,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    creator: 'import'
+                  })
+                }
+              })
+              
+              alert(`导入成功！共导入 ${standards.length} 条质检标准，${categoryDefs.size} 个大类定义，${subcategoryDefs.size} 个小类定义`)
             }
           } catch {
             alert('导入失败，请检查文件格式')
@@ -444,6 +607,34 @@ export default function SystemConfiguration() {
       }
     }
     input.click()
+  }
+
+  // 解析CSV行（处理引号内的逗号）
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    result.push(current.trim())
+    
+    return result
   }
 
   return (
@@ -519,7 +710,6 @@ export default function SystemConfiguration() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-r border-gray-200 w-32">大类</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-r border-gray-200 w-40">小类</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-r border-gray-200 w-32">标准</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-r border-gray-200 min-w-[180px]">定义说明</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-r border-gray-200 min-w-[200px]">错误码配置项</th>
                   <th className="px-4 py-3 text-center text-sm font-medium text-gray-700 border-b border-gray-200 w-24">操作</th>
                 </tr>
@@ -527,7 +717,7 @@ export default function SystemConfiguration() {
               <tbody>
                 {flattenedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                       暂无质检标准数据，请点击导入或手动添加
                     </td>
                   </tr>
@@ -600,22 +790,20 @@ export default function SystemConfiguration() {
                           className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200 align-top"
                         >
                           <div className="flex items-center justify-between group">
-                            <div className="flex items-center space-x-1">
+                            <div className="flex-1 min-w-0">
                               <span>{row.category}</span>
-                              {getDefinition('category', row.dimension, row.category) && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      <Info className="w-3 h-3 text-blue-500" />
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-xs">
-                                      <p className="text-xs">{getDefinition('category', row.dimension, row.category)?.definition}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
+                              {/* 定义说明 - 灰色小字备注形式展示在名称下方 */}
+                              <div 
+                                className="mt-1 text-xs text-gray-400 cursor-pointer hover:text-gray-600 truncate"
+                                onClick={() => handleOpenDefinitionDialog('category', row.dimension, row.category)}
+                                title={getDefinition('category', row.dimension, row.category)?.definition || '点击添加定义说明'}
+                              >
+                                {getDefinition('category', row.dimension, row.category)?.definition || (
+                                  <span className="italic text-gray-300 hover:text-gray-500">+ 添加定义说明</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100">
+                            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 ml-2">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -659,22 +847,20 @@ export default function SystemConfiguration() {
                           className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200 align-top"
                         >
                           <div className="flex items-center justify-between group">
-                            <div className="flex items-center space-x-1">
+                            <div className="flex-1 min-w-0">
                               <span>{row.subcategory}</span>
-                              {getDefinition('subcategory', row.dimension, row.category, row.subcategory) && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      <Info className="w-3 h-3 text-blue-500" />
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-xs">
-                                      <p className="text-xs">{getDefinition('subcategory', row.dimension, row.category, row.subcategory)?.definition}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
+                              {/* 定义说明 - 灰色小字备注形式展示在名称下方 */}
+                              <div 
+                                className="mt-1 text-xs text-gray-400 cursor-pointer hover:text-gray-600 truncate"
+                                onClick={() => handleOpenDefinitionDialog('subcategory', row.dimension, row.category, row.subcategory)}
+                                title={getDefinition('subcategory', row.dimension, row.category, row.subcategory)?.definition || '点击添加定义说明'}
+                              >
+                                {getDefinition('subcategory', row.dimension, row.category, row.subcategory)?.definition || (
+                                  <span className="italic text-gray-300 hover:text-gray-500">+ 添加定义说明</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100">
+                            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 ml-2">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -766,22 +952,6 @@ export default function SystemConfiguration() {
                                 <Plus className="w-3 h-3" />
                               </Button>
                             </div>
-                          </div>
-                        </td>
-                      )}
-                      
-                      {/* 定义说明列 - 显示当前行所属标准的定义 */}
-                      {row.showStandard && (
-                        <td 
-                          rowSpan={row.standardRowspan} 
-                          className="px-4 py-3 text-sm text-gray-600 border-r border-gray-200 align-top"
-                        >
-                          <div className="max-w-xs text-xs">
-                            {getDefinition('standard', row.dimension, row.category, row.subcategory, row.standard)?.definition || 
-                             getDefinition('subcategory', row.dimension, row.category, row.subcategory)?.definition ||
-                             getDefinition('category', row.dimension, row.category)?.definition ||
-                             getDefinition('dimension', row.dimension)?.definition ||
-                             <span className="text-gray-400 italic">暂无定义说明</span>}
                           </div>
                         </td>
                       )}
