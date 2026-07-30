@@ -21,7 +21,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { ChevronDown, Search, MoreHorizontal, Download } from 'lucide-react'
-import { useOnlineChannelStore, RISK_LEVELS, RiskLevel } from '@/store/onlineStore'
+import { RISK_LEVELS, RiskLevel } from '@/store/onlineStore'
 
 interface OnlineTask {
   id: string
@@ -137,10 +137,6 @@ const MOCK_ANNOTATION_RECORDS = buildMockAnnotationRecords()
 
 export default function OnlineTaskList() {
   const navigate = useNavigate()
-  const { getCurrentChannel, getCurrentProject } = useOnlineChannelStore()
-  const currentChannel = getCurrentChannel()
-  const currentProject = getCurrentProject()
-
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState('all')
 
@@ -243,29 +239,10 @@ export default function OnlineTaskList() {
   return (
     <OnlineLayout>
       <div className="flex h-full">
-        {/* 左侧二级导航 */}
-        <div className="w-40 bg-white border-r border-gray-200 shrink-0 py-4 px-2 space-y-1">
-          <div className="text-xs text-gray-400 px-2 mb-1 flex items-center gap-1">
-            质检中心 <ChevronDown className="w-3 h-3" />
-          </div>
-          <div className="px-3 py-1.5 text-sm text-gray-500 rounded-md hover:bg-gray-50 cursor-pointer">质检分析</div>
-          <div className="px-3 py-1.5 text-sm text-gray-500 rounded-md hover:bg-gray-50 cursor-pointer">质检标准配置</div>
-          <div className="px-3 py-1.5 text-sm text-blue-600 font-medium bg-blue-50 rounded-md">人工质检任务名</div>
-          <div className="px-3 py-1.5 text-sm text-gray-500 rounded-md hover:bg-gray-50 cursor-pointer">优化操作台</div>
-          <div className="text-xs text-gray-400 px-2 mt-3 flex items-center gap-1">
-            数据洞察 <ChevronDown className="w-3 h-3" />
-          </div>
-        </div>
-
         {/* 主内容 */}
         <div className="flex-1 overflow-auto p-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-base font-semibold text-gray-900">
-              人工质检任务
-              <span className="ml-2 text-xs text-gray-400 font-normal">
-                （当前渠道：{currentProject?.name.split('：')[0].split(':')[0]} · {currentChannel?.name}）
-              </span>
-            </h1>
+            <h1 className="text-base font-semibold text-gray-900">人工质检任务</h1>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setExportOpen(true)}>
                 <Download className="w-3.5 h-3.5 mr-1" />
