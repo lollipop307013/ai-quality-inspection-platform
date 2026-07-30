@@ -1876,24 +1876,6 @@ session_002,我想咨询游戏问题,请问您遇到了什么具体问题？,202
               </Card>
             </div>
           )}
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {singleExecutionDate ? format(singleExecutionDate, "yyyy-MM-dd HH:mm") : "选择执行时间"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                  mode="single"
-                                  selected={singleExecutionDate}
-                                  onSelect={setSingleExecutionDate}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
 
                   {/* 周期性任务配置 */}
                   {executionType === 'periodic' && (

@@ -293,6 +293,21 @@ export default function Layout({ children }: LayoutProps) {
               )}
             </div>
 
+            {/* 线上标注平台原型入口 */}
+            {currentUser.role === 'admin' && (
+              <Link
+                to="/online-task-list"
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  location.pathname.startsWith('/online-')
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <Target className="mr-3 h-4 w-4" />
+                线上标注平台原型
+              </Link>
+            )}
+
             {/* 管理员专用的其他菜单项 */}
             {currentUser.role === 'admin' && (
               <>
