@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, ReactNode } from 'react'
 import Layout from './layout'
 import QualityManagementCenter from './pages/quality-management-center'
@@ -47,7 +47,8 @@ function App() {
     <Router>
       <ConditionalLayout>
         <Routes>
-          <Route path="/" element={<QualityManagementCenter />} />
+          <Route path="/" element={<Navigate to="/online-quality-standards" replace />} />
+          <Route path="/legacy" element={<QualityManagementCenter />} />
           <Route path="/annotation-workbench" element={<AnnotationWorkbench />} />
           <Route path="/task-center" element={<TaskCenter />} />
           <Route path="/quality-standards" element={<SystemConfiguration />} />
