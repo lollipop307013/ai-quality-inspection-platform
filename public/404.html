@@ -7,7 +7,8 @@
       // GitHub Pages 不支持 SPA 客户端路由，直接访问二级路径会走到这个 404.html。
       // 这里把当前路径编码后重定向回站点根目录，index.html 中的脚本会还原真实路径。
       // 参考方案: https://github.com/rafgraph/spa-github-pages
-      var pathSegmentsToKeep = 1; // 对应 base: '/ai-quality-inspection-platform/'
+      // 自适应：项目站点(base=/ai-quality-inspection-platform/)保留1段，用户级站点(base=/)保留0段
+      var pathSegmentsToKeep = (window.location.pathname.indexOf('/ai-quality-inspection-platform/') === 0) ? 1 : 0;
 
       var l = window.location;
       l.replace(
