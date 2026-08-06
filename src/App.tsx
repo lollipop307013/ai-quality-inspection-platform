@@ -47,7 +47,7 @@ function App() {
     <Router>
       <ConditionalLayout>
         <Routes>
-          <Route path="/" element={<Navigate to="/online-quality-standards" replace />} />
+          <Route path="/" element={<Navigate to="/online-task-list" replace />} />
           <Route path="/legacy" element={<QualityManagementCenter />} />
           <Route path="/annotation-workbench" element={<AnnotationWorkbench />} />
           <Route path="/task-center" element={<TaskCenter />} />
