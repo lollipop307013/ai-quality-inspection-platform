@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Calendar } from './ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
-import { CalendarIcon, Plus, CheckCircle, AlertCircle, X } from 'lucide-react'
+import { CalendarIcon, Plus, CheckCircle, AlertCircle, X, Download, Upload } from 'lucide-react'
 import { format } from 'date-fns'
 
 // 简单的 className 合并函数
@@ -77,8 +77,11 @@ export default function TaskCreationDialog({
     startDate: undefined as Date | undefined,
     endDate: undefined as Date | undefined
   })
-  
 
+  // 手动导入文件
+  const [manualImportFile, setManualImportFile] = useState<File | null>(null)
+  const [forceDialogueFormat, setForceDialogueFormat] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // 模拟数据
   const databaseOptions = [
@@ -166,8 +169,8 @@ export default function TaskCreationDialog({
           }
           return true
         } else {
-          // 手动导入暂不支持（一期）
-          return false
+          // 手动导入：必须上传文件
+          return !!manualImportFile
         }
       case 3: // Step4：确认与创建
         return true
@@ -259,6 +262,26 @@ export default function TaskCreationDialog({
 
 
 
+  const downloadTemplate = () => {
+    const link = document.createElement('a')
+    link.setAttribute('href', `${import.meta.env.BASE_URL}templates/人工质检任务_手动导入模板草案.xlsx`)
+    link.setAttribute('download', '人工质检任务_手动导入模板草案.xlsx')
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const triggerUpload = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleManualFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setManualImportFile(file)
+  }
+
   const handleSubmit = () => {
     const taskQuantity = onlineConfig.taskQuantity || 100
     
@@ -338,6 +361,8 @@ export default function TaskCreationDialog({
       endDate: undefined
     })
     setSelectedAnnotationTypes([])
+    setManualImportFile(null)
+    setForceDialogueFormat(true)
   }
 
   return (
@@ -345,7 +370,7 @@ export default function TaskCreationDialog({
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[86vh] overflow-hidden flex flex-col p-3">
         <style>{`
           .scrollbar-thin::-webkit-scrollbar {
             width: 6px;
@@ -361,39 +386,31 @@ export default function TaskCreationDialog({
             background: #94a3b8;
           }
         `}</style>
-        <DialogHeader>
-          <DialogTitle className="text-sm font-medium flex items-center">
-            <Plus className="w-5 h-5 mr-2" />
+        <DialogHeader className="pb-2 border-b">
+          <DialogTitle className="text-xs font-medium flex items-center">
+            <Plus className="w-4 h-4 mr-1.5" />
             {isEditMode ? '编辑质检任务' : '创建质检任务'}
           </DialogTitle>
         </DialogHeader>
 
-        {/* 步骤指示器 - 固定在顶部 */}
-        <div className="flex items-center justify-between mb-4 pb-4 border-b sticky top-0 bg-white z-10">
+        {/* 步骤指示器 - 紧凑样式，贴近设计稿 */}
+        <div className="flex items-center justify-between pb-3 border-b sticky top-0 bg-white z-10">
           {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                index === currentStep 
-                  ? 'bg-blue-600 border-blue-600 text-white' 
-                  : index < currentStep 
-                    ? 'bg-green-600 border-green-600 text-white'
-                    : 'border-gray-300 text-gray-400'
-              }`}>
-                {index < currentStep ? '✓' : index + 1}
+            <div key={step.id} className="flex items-center flex-1 min-w-0">
+              <div
+                className={`flex items-center justify-center w-3.5 h-3.5 rounded-full border ${
+                  index <= currentStep ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300 text-transparent'
+                }`}
+              >
+                •
               </div>
-              <div className="ml-3">
-                <p className={`text-sm font-medium ${
-                  index === currentStep ? 'text-blue-600' : index < currentStep ? 'text-green-600' : 'text-gray-400'
-                }`}>
-                  {step.title}
+              <div className="ml-2 min-w-0">
+                <p className={`text-[11px] leading-4 truncate ${index === currentStep ? 'text-gray-900' : 'text-gray-500'}`}>
+                  第{index + 1}步：{step.title}
                 </p>
-                <p className="text-xs text-gray-500">{step.description}</p>
+                <p className="text-[10px] leading-4 text-gray-400 truncate">{step.description}</p>
               </div>
-              {index < steps.length - 1 && (
-                <div className={`w-12 h-0.5 mx-4 ${
-                  index < currentStep ? 'bg-green-600' : 'bg-gray-300'
-                }`} />
-              )}
+              {index < steps.length - 1 && <div className="mx-2 h-px flex-1 bg-gray-200" />}
             </div>
           ))}
         </div>
@@ -480,582 +497,171 @@ export default function TaskCreationDialog({
 
           {/* Step2：标注项目配置 */}
           {currentStep === 1 && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">第2步：标注项目配置</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>选择所需的标注字段 *</Label>
-                    <p className="text-sm text-gray-600 mt-1 mb-4">
-                      本期仅支持错误码标注（卡片式选择，校验至少需要选择一类。一期仅提供错误码标注，不可配置）
-                    </p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {availableAnnotationTypes.map((type) => (
-                        <div 
-                          key={type.id} 
-                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${
-                            selectedAnnotationTypes.includes(type.id) 
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          onClick={() => handleAnnotationTypeChange(type.id, !selectedAnnotationTypes.includes(type.id))}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2">
-                                <Checkbox
-                                  checked={selectedAnnotationTypes.includes(type.id)}
-                                  onChange={() => {}} // 由父级div的onClick处理
-                                  className="w-5 h-5"
-                                />
-                                <h4 className="font-semibold text-gray-900">{type.name}</h4>
-                              </div>
-                              <p className="text-sm text-gray-600 mt-2">{type.description}</p>
-                            </div>
-                            
-                            {selectedAnnotationTypes.includes(type.id) && (
-                              <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {selectedAnnotationTypes.length === 0 && (
-                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <div className="flex items-center">
-                          <AlertCircle className="w-4 h-4 mr-2 text-amber-600" />
-                          <span className="text-sm text-amber-800">
-                            请至少选择一种标注类型
-                          </span>
-                        </div>
-                      </div>
-                    )}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-semibold text-gray-900">第2步：标注项目配置</h3>
+              <div>
+                <Label className="text-xs">选择可用的字段类型</Label>
+                <div
+                  className={`mt-2 w-[180px] rounded border px-3 py-2 cursor-pointer transition-colors ${
+                    selectedAnnotationTypes.includes('error_code')
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                  onClick={() => handleAnnotationTypeChange('error_code', !selectedAnnotationTypes.includes('error_code'))}
+                >
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedAnnotationTypes.includes('error_code')}
+                      onChange={() => {}}
+                      className="w-3.5 h-3.5"
+                    />
+                    <span className="text-xs text-gray-800">错误码标注</span>
                   </div>
-                </CardContent>
-              </Card>
+                  <p className="text-[10px] text-gray-500 mt-1">基于质检标准配置中的错误码进行标注</p>
+                </div>
+              </div>
+
+              {selectedAnnotationTypes.length === 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  请至少选择一种标注类型
+                </div>
+              )}
             </div>
           )}
 
           {/* Step3：数据来源配置 */}
           {currentStep === 2 && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">第3步：数据来源配置</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            <div className="space-y-3 pt-2">
+              <h3 className="text-sm font-semibold text-gray-900">第3步：数据来源配置</h3>
+
+              <div>
+                <Label className="text-xs">数据来源 *</Label>
+                <RadioGroup
+                  value={dataSource}
+                  onValueChange={(value: 'online' | 'import') => setDataSource(value)}
+                  className="flex gap-4 mt-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="online" id="online" />
+                    <Label htmlFor="online" className="text-xs">数据库导入</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="import" id="import" />
+                    <Label htmlFor="import" className="text-xs">手动导入</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {dataSource === 'online' && (
+                <div className="space-y-3 border rounded p-3 bg-blue-50/20">
                   <div>
-                    <Label>数据来源 *</Label>
-                    <RadioGroup 
-                      value={dataSource} 
-                      onValueChange={(value: 'online' | 'import') => setDataSource(value)}
-                      className="flex space-x-4 mt-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="online" id="online" />
-                        <Label htmlFor="online">数据库导入</Label>
-                      </div>
-                      <div className="flex items-center space-x-2 opacity-50">
-                        <RadioGroupItem value="import" id="import" disabled />
-                        <Label htmlFor="import">手动导入（一期不做）</Label>
-                      </div>
-                    </RadioGroup>
+                    <Label className="text-xs">选择数据库 *</Label>
+                    <Select value={onlineConfig.database} onValueChange={(value) => setOnlineConfig({ ...onlineConfig, database: value })}>
+                      <SelectTrigger className="mt-1.5 h-8 text-xs">
+                        <SelectValue placeholder="请选择数据库" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {databaseOptions.map((db) => (
+                          <SelectItem key={db.id} value={db.id}>{db.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  {/* 数据库导入配置 */}
-                  {dataSource === 'online' && dataType === 'dialogue' && (
-                    <Card className="border-blue-200 bg-blue-50/30">
-                      <CardHeader>
-                        <CardTitle className="text-base">数据库导入配置</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {/* 选择数据库 */}
-                        <div>
-                          <Label>选择数据库 *</Label>
-                          <Select 
-                            value={onlineConfig.database} 
-                            onValueChange={(value) => setOnlineConfig({...onlineConfig, database: value})}
-                          >
-                            <SelectTrigger className="mt-2">
-                              <SelectValue placeholder="选择数据库" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {databaseOptions.map(db => (
-                                <SelectItem key={db.id} value={db.id}>{db.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <p className="text-sm text-gray-500 mt-1">
-                            一期仅提供质检消息表
-                          </p>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Label className="text-xs">数据源配置（渠道+游戏ID）*</Label>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={addDataSource}>
+                        <Plus className="w-3.5 h-3.5 mr-1" />添加
+                      </Button>
+                    </div>
+                    {onlineConfig.dataSources.length === 0 ? (
+                      <div className="text-[11px] text-gray-500 border border-dashed rounded px-3 py-3">请添加至少一个数据源组合</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {onlineConfig.dataSources.map((source, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <Select value={source.channel} onValueChange={(value) => updateDataSource(index, 'channel', value)}>
+                              <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="选择渠道" /></SelectTrigger>
+                              <SelectContent>
+                                {channelOptions.map((channel) => (
+                                  <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={source.gameId} onValueChange={(value) => updateDataSource(index, 'gameId', value)}>
+                              <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="选择游戏ID" /></SelectTrigger>
+                              <SelectContent>
+                                {gameOptions.map((game) => (
+                                  <SelectItem key={game.id} value={game.id}>{game.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 px-0" onClick={() => removeDataSource(index)}>
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {dataSource === 'import' && (
+                <div className="space-y-3 border rounded p-3 bg-amber-50/10">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleManualFileChange}
+                  />
+
+                  <div>
+                    <Label className="text-xs">上传文件（选填）</Label>
+                    <div className="mt-2 flex items-center gap-3 text-xs">
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={triggerUpload}>
+                        <Upload className="w-3.5 h-3.5 mr-1" /> 选择文件
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-blue-600" onClick={downloadTemplate}>
+                        <Download className="w-3.5 h-3.5 mr-1" /> 下载模板
+                      </Button>
+                    </div>
+                  </div>
+
+                  {manualImportFile && (
+                    <div className="flex items-center justify-between border rounded px-2.5 py-2 bg-white">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded bg-green-500 text-white text-[10px] flex items-center justify-center">XLS</div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-800 truncate">{manualImportFile.name}</p>
+                          <p className="text-[10px] text-gray-400">{(manualImportFile.size / 1024).toFixed(1)} KB</p>
                         </div>
-
-                        {/* 数据源列表 */}
-                        {onlineConfig.database && (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <Label>数据源配置（渠道 + 游戏ID组合）*</Label>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={addDataSource}
-                              >
-                                <Plus className="w-4 h-4 mr-1" />
-                                添加数据源
-                              </Button>
-                            </div>
-                            
-                            <p className="text-sm text-gray-500 mb-3">
-                              支持多组来源合并生成同一份数据（不论先后顺序）
-                            </p>
-                            
-                            {onlineConfig.dataSources.length === 0 && (
-                              <div className="p-4 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-500">
-                                请点击"添加数据源"按钮添加至少一个渠道+游戏ID组合
-                              </div>
-                            )}
-
-                            {onlineConfig.dataSources.map((source, index) => (
-                              <div key={index} className="flex items-center gap-2 mb-2">
-                                <Select 
-                                  value={source.channel} 
-                                  onValueChange={(value) => updateDataSource(index, 'channel', value)}
-                                >
-                                  <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="选择渠道" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {channelOptions.map(channel => (
-                                      <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-
-                                <span className="text-gray-500">+</span>
-
-                                <Select 
-                                  value={source.gameId} 
-                                  onValueChange={(value) => updateDataSource(index, 'gameId', value)}
-                                >
-                                  <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="选择游戏ID" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {gameOptions.map(game => (
-                                      <SelectItem key={game.id} value={game.id}>{game.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeDataSource(index)}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* 任务创建方式 */}
-                        <div>
-                          <Label>任务创建方式 *</Label>
-                          <RadioGroup 
-                            value={executionType} 
-                            onValueChange={(value: 'single' | 'periodic') => setExecutionType(value)}
-                            className="flex space-x-4 mt-2"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="single" id="single-exec" />
-                              <Label htmlFor="single-exec">单次任务</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="periodic" id="periodic-exec" />
-                              <Label htmlFor="periodic-exec">周期任务</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-
-                        {/* 单次任务时间范围 */}
-                        {executionType === 'single' && (
-                          <div>
-                            <Label>数据时间范围 *</Label>
-                            <div className="grid grid-cols-2 gap-4 mt-2">
-                              <div>
-                                <Label className="text-sm">起始日期</Label>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      className={cn(
-                                        "w-full justify-start text-left font-normal mt-1",
-                                        !singleTimeRange.startDate && "text-muted-foreground"
-                                      )}
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {singleTimeRange.startDate ? 
-                                        format(singleTimeRange.startDate, "yyyy-MM-dd") : 
-                                        "选择起始日期"
-                                      }
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                      mode="single"
-                                      selected={singleTimeRange.startDate}
-                                      onSelect={(date) => setSingleTimeRange({
-                                        ...singleTimeRange,
-                                        startDate: date
-                                      })}
-                                      initialFocus
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
-                              
-                              <div>
-                                <Label className="text-sm">结束日期</Label>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      className={cn(
-                                        "w-full justify-start text-left font-normal mt-1",
-                                        !singleTimeRange.endDate && "text-muted-foreground"
-                                      )}
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {singleTimeRange.endDate ? 
-                                        format(singleTimeRange.endDate, "yyyy-MM-dd") : 
-                                        "选择结束日期"
-                                      }
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                      mode="single"
-                                      selected={singleTimeRange.endDate}
-                                      onSelect={(date) => setSingleTimeRange({
-                                        ...singleTimeRange,
-                                        endDate: date
-                                      })}
-                                      initialFocus
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
-                            </div>
-                            <p className="text-sm text-gray-500 mt-1">
-                              支持同一天起止
-                            </p>
-                          </div>
-                        )}
-
-                        {/* 周期任务配置 */}
-                        {executionType === 'periodic' && (
-                          <div className="space-y-4">
-                            <div>
-                              <Label>周期范围 *</Label>
-                              <div className="grid grid-cols-2 gap-4 mt-2">
-                                <div>
-                                  <Label className="text-sm">起始日期</Label>
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        className={cn(
-                                          "w-full justify-start text-left font-normal mt-1",
-                                          !periodicConfig.startDate && "text-muted-foreground"
-                                        )}
-                                      >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {periodicConfig.startDate ? format(periodicConfig.startDate, "yyyy-MM-dd") : "选择起始日期"}
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                      <Calendar
-                                        mode="single"
-                                        selected={periodicConfig.startDate}
-                                        onSelect={(date) => setPeriodicConfig({...periodicConfig, startDate: date})}
-                                        initialFocus
-                                      />
-                                    </PopoverContent>
-                                  </Popover>
-                                </div>
-                                
-                                <div>
-                                  <Label className="text-sm">结束日期</Label>
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        className={cn(
-                                          "w-full justify-start text-left font-normal mt-1",
-                                          !periodicConfig.endDate && "text-muted-foreground"
-                                        )}
-                                      >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {periodicConfig.endDate ? format(periodicConfig.endDate, "yyyy-MM-dd") : "选择结束日期"}
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                      <Calendar
-                                        mode="single"
-                                        selected={periodicConfig.endDate}
-                                        onSelect={(date) => setPeriodicConfig({...periodicConfig, endDate: date})}
-                                        initialFocus
-                                      />
-                                    </PopoverContent>
-                                  </Popover>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                              <Label>生成节点配置 *</Label>
-                              <p className="text-sm text-gray-500 mt-1 mb-3">
-                                先选择节点类型，如果选择"每周"则需要选择在哪几天跑任务，然后为每个节点配置向前获取几天的数据（默认1天，避免数据重叠）
-                              </p>
-                              
-                              {/* 步骤1：选择节点类型 */}
-                              <Card className="border-gray-300 bg-gray-50/50 mb-3">
-                                <CardContent className="pt-4 space-y-3">
-                                  <div>
-                                    <Label className="text-sm">节点类型 *</Label>
-                                    <RadioGroup 
-                                      value={periodicConfig.scheduleType} 
-                                      onValueChange={(value: 'daily' | 'weekly') => 
-                                        setPeriodicConfig({...periodicConfig, scheduleType: value, selectedWeekdays: [], weekdayDataRanges: {}})
-                                      }
-                                      className="flex space-x-4 mt-2"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="daily" id="schedule-daily" />
-                                        <Label htmlFor="schedule-daily">每天（固定获取前1天数据）</Label>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="weekly" id="schedule-weekly" />
-                                        <Label htmlFor="schedule-weekly">每周（自定义星期几和数据范围）</Label>
-                                      </div>
-                                    </RadioGroup>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                              
-                              {/* 步骤2：如果选择每周，配置星期几 */}
-                              {periodicConfig.scheduleType === 'weekly' && (
-                                <>
-                                  <Card className="border-blue-200 bg-blue-50/30 mb-3">
-                                    <CardContent className="pt-4 space-y-3">
-                                      <div>
-                                        <Label className="text-sm">选择执行日期 *</Label>
-                                        <p className="text-xs text-gray-500 mb-2">
-                                          请选择每周哪几天执行任务
-                                        </p>
-                                        <div className="grid grid-cols-7 gap-2">
-                                          {[1, 2, 3, 4, 5, 6, 0].map(weekday => (
-                                            <div
-                                              key={weekday}
-                                              onClick={() => toggleWeekday(weekday)}
-                                              className={`
-                                                border-2 rounded-lg p-3 cursor-pointer text-center transition-all
-                                                ${periodicConfig.selectedWeekdays.includes(weekday)
-                                                  ? 'border-blue-500 bg-blue-100 text-blue-700'
-                                                  : 'border-gray-300 bg-white hover:border-gray-400'
-                                                }
-                                              `}
-                                            >
-                                              <div className="text-sm font-medium">{weekdayNames[weekday]}</div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                  
-                                  {/* 步骤3：为每个选中的星期几配置数据范围 */}
-                                  {periodicConfig.selectedWeekdays.length > 0 && (
-                                    <Card className="border-green-200 bg-green-50/30">
-                                      <CardContent className="pt-4 space-y-3">
-                                        <div>
-                                          <Label className="text-sm">配置数据范围</Label>
-                                          <p className="text-xs text-gray-500 mb-3">
-                                            为每个执行日配置向前获取几天的数据（不配置默认1天）
-                                          </p>
-                                          
-                                          {[...periodicConfig.selectedWeekdays].sort((a, b) => a - b).map(weekday => {
-                                            const maxDays = getMaxDataRangeForWeekday(weekday)
-                                            const currentDays = periodicConfig.weekdayDataRanges[weekday] || 1
-                                            return (
-                                              <div key={weekday} className="flex items-center gap-3 mb-2 p-3 bg-white rounded-lg border border-gray-200">
-                                                <div className="flex-shrink-0 w-16 text-sm font-medium text-gray-700">
-                                                  {weekdayNames[weekday]}
-                                                </div>
-                                                <div className="flex-1">
-                                                  <Select 
-                                                    value={currentDays.toString()} 
-                                                    onValueChange={(value) => updateWeekdayDataRange(weekday, parseInt(value))}
-                                                  >
-                                                    <SelectTrigger className="w-full">
-                                                      <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {Array.from({ length: maxDays }, (_, i) => i + 1).map(day => (
-                                                        <SelectItem key={day} value={day.toString()}>
-                                                          获取前{day}天数据
-                                                        </SelectItem>
-                                                      ))}
-                                                    </SelectContent>
-                                                  </Select>
-                                                </div>
-                                                <div className="flex-shrink-0 text-xs text-gray-500">
-                                                  最多{maxDays}天
-                                                </div>
-                                              </div>
-                                            )
-                                          })}
-                                        </div>
-                                      </CardContent>
-                                    </Card>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 数据筛选（可选）*/}
-                        <div className="border-t pt-4">
-                          <h4 className="text-base font-semibold text-gray-900 mb-4">数据筛选（可选）</h4>
-                          
-                          {/* 会话数量 */}
-                          <div className="mb-4">
-                            <Label htmlFor="task-quantity">会话数量</Label>
-                            <Input
-                              id="task-quantity"
-                              type="number"
-                              min="0"
-                              value={onlineConfig.taskQuantity || ''}
-                              onChange={(e) => setOnlineConfig({
-                                ...onlineConfig,
-                                taskQuantity: parseInt(e.target.value) || 0
-                              })}
-                              placeholder="配置每次拉取的最大会话数量，超出则随机抽取"
-                              className="mt-2"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">
-                              如果可用数量超过此值，则随机抽取一部分生成
-                            </p>
-                          </div>
-                          
-                          {/* 关键词过滤 */}
-                          <div className="mb-4">
-                            <Label htmlFor="keywords-filter">关键词过滤</Label>
-                            <Textarea
-                              id="keywords-filter"
-                              value={onlineConfig.keywords}
-                              onChange={(e) => setOnlineConfig({
-                                ...onlineConfig,
-                                keywords: e.target.value
-                              })}
-                              placeholder="输入过滤关键词（每行一个）&#10;例如：悠悠0210"
-                              rows={3}
-                              className="mt-2"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">
-                              若拉取数据中包含关键词，则过滤掉整个会话
-                            </p>
-                          </div>
-                          
-                          {/* 规则过滤 */}
-                          <div>
-                            <Label>规则过滤</Label>
-                            <p className="text-sm text-gray-600 mt-1 mb-3">
-                              用于过滤掉无效标注样本
-                            </p>
-                            
-                            <div className="space-y-2">
-                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <Checkbox 
-                                  id="rule-no-bot-reply"
-                                  checked={onlineConfig.filterRules.includes('no_bot_reply')}
-                                  onChange={(e) => {
-                                    const newRules = e.target.checked
-                                      ? [...onlineConfig.filterRules, 'no_bot_reply']
-                                      : onlineConfig.filterRules.filter(r => r !== 'no_bot_reply')
-                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
-                                  }}
-                                  className="w-4 h-4"
-                                />
-                                <div className="flex-1">
-                                  <Label htmlFor="rule-no-bot-reply" className="font-medium text-gray-700 cursor-pointer">
-                                    无Bot回复
-                                  </Label>
-                                  <p className="text-xs text-gray-600 mt-0.5">
-                                    过滤掉仅存在玩家提问，无Bot回应的会话
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <Checkbox 
-                                  id="rule-pure-push"
-                                  checked={onlineConfig.filterRules.includes('pure_push')}
-                                  onChange={(e) => {
-                                    const newRules = e.target.checked
-                                      ? [...onlineConfig.filterRules, 'pure_push']
-                                      : onlineConfig.filterRules.filter(r => r !== 'pure_push')
-                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
-                                  }}
-                                  className="w-4 h-4"
-                                />
-                                <div className="flex-1">
-                                  <Label htmlFor="rule-pure-push" className="font-medium text-gray-700 cursor-pointer">
-                                    纯推送消息
-                                  </Label>
-                                  <p className="text-xs text-gray-600 mt-0.5">
-                                    过滤纯Bot推送消息（会话中只存在bot(push)的sender_type）
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <Checkbox 
-                                  id="rule-pure-image"
-                                  checked={onlineConfig.filterRules.includes('pure_image')}
-                                  onChange={(e) => {
-                                    const newRules = e.target.checked
-                                      ? [...onlineConfig.filterRules, 'pure_image']
-                                      : onlineConfig.filterRules.filter(r => r !== 'pure_image')
-                                    setOnlineConfig({ ...onlineConfig, filterRules: newRules })
-                                  }}
-                                  className="w-4 h-4"
-                                />
-                                <div className="flex-1">
-                                  <Label htmlFor="rule-pure-image" className="font-medium text-gray-700 cursor-pointer">
-                                    纯图片会话
-                                  </Label>
-                                  <p className="text-xs text-gray-600 mt-0.5">
-                                    会话中玩家发言仅包含图片类型的消息
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px]"
+                        onClick={() => setManualImportFile(null)}
+                      >
+                        删除
+                      </Button>
+                    </div>
                   )}
-                </CardContent>
-              </Card>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="force-dialogue-format"
+                      checked={forceDialogueFormat}
+                      onCheckedChange={(checked) => setForceDialogueFormat(Boolean(checked))}
+                    />
+                    <Label htmlFor="force-dialogue-format" className="text-xs text-gray-600">强制保持对话格式</Label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

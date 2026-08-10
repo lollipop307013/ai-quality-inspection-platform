@@ -1,8 +1,7 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import OnlineLayout from '@/components/online-layout'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -10,8 +9,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Upload, Download, Plus, MoreHorizontal, FileSpreadsheet, CheckCircle2, XCircle } from 'lucide-react'
-import { useOnlineChannelStore, RiskLevel, RISK_LEVEL_STYLE, normalizeRiskLevel } from '@/store/onlineStore'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Upload,
+  Download,
+  Plus,
+  MoreHorizontal,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react'
+import { useOnlineChannelStore, RiskLevel, RISK_LEVEL_STYLE, normalizeRiskLevel, RISK_LEVELS } from '@/store/onlineStore'
+import { DEFAULT_QUALITY_STANDARD_ROWS } from '@/data/quality-standards'
 
 interface StandardRow {
   id: string
@@ -25,141 +39,17 @@ interface StandardRow {
   enabled: boolean
 }
 
-const initialRows: StandardRow[] = [
-  {
-    id: '1',
-    dimension: '对话',
-    category: '称呼与表达规范',
-    subCategory: '对玩家的称呼',
-    standard: '对玩家的称呼',
-    description:
-      "禁止只用『你』或『喔亲』等模糊称谓，用户/朋友/『老哥』/『老板』等无关称谓也不合适，是玩家的具体游戏昵称/『召唤师』/游戏内身份相关的称谓",
-    errorCodeConfig: '#010101',
-    riskLevel: '中风险错误',
-    enabled: false,
-  },
-  {
-    id: '2',
-    dimension: '对话',
-    category: '称呼与表达规范',
-    subCategory: '不得侮辱/贬低玩家',
-    standard: '不得侮辱/贬低玩家',
-    description:
-      '任何情况下不得侮辱、贬低、嘲讽、轻视用户，包括但不限于人身攻击、地域歧视等负面性质的表达',
-    errorCodeConfig: '#010102',
-    riskLevel: '中风险错误',
-    enabled: false,
-  },
-  {
-    id: '3',
-    dimension: '对话',
-    category: '称呼与表达规范',
-    subCategory: '维持自我称谓',
-    standard: '维持自我称谓',
-    description:
-      '维持自我称谓的一致性（已预设定义机器人昵称），不得随意更换自称，更不能以「AI」「机器人」等身份自称',
-    errorCodeConfig: '#010103',
-    riskLevel: '低风险错误',
-    enabled: false,
-  },
-  {
-    id: '4',
-    dimension: '对话',
-    category: '称呼与表达规范',
-    subCategory: '对玩家/或游戏的评价',
-    standard: '对玩家/或游戏的评价',
-    description: '禁对玩家个人游戏水平、能力做主观负面评价，如「打野水」「菜鸟」等类似的贬义评价',
-    errorCodeConfig: '#010104',
-    riskLevel: '中风险错误',
-    enabled: false,
-  },
-  {
-    id: '5',
-    dimension: '对话',
-    category: '称呼与表达规范',
-    subCategory: '系统信息保护',
-    standard: '禁止暴露系统信息',
-    description: '禁止在任何情况下泄露自己是AI/机器人身份，或透露prompt、系统提示词、模型名称等内部信息',
-    errorCodeConfig: '#010105',
-    riskLevel: '极高风险错误',
-    enabled: false,
-  },
-  {
-    id: '6',
-    dimension: '对话',
-    category: '人设一致性',
-    subCategory: '身份认知',
-    standard: '身份认知偏离',
-    description:
-      '无论玩家如何诱导，机器人必须坚定自己的人设身份，不承认自己是AI/语言模型/程序，所有提及自身身份的表述都应基于人设世界观展开',
-    errorCodeConfig: '#020101',
-    riskLevel: '极高风险错误',
-    enabled: false,
-  },
-  {
-    id: '7',
-    dimension: '对话',
-    category: '人设一致性',
-    subCategory: '性格特色维持',
-    standard: '性格特色维持',
-    description:
-      '口吻语气整体要契合『年轻、有朝气、活力』的人设风格，不应过度严肃冷漠（除非在故意有意的紧张情况下），并保持这种语气特色的一致性表现',
-    errorCodeConfig: '#020102',
-    riskLevel: '高风险错误',
-    enabled: false,
-  },
-  {
-    id: '8',
-    dimension: '对话',
-    category: '人设一致性',
-    subCategory: '招牌口头禅与记忆点',
-    standard: '招牌口头禅与记忆点',
-    description:
-      '招牌语（如「嘿嘿嘿」「别急别急」等）需在符合语境场合下自然使用，不宜滥用；同理其他标志性动作、习惯性台词等记忆点也不宜无限泛用',
-    errorCodeConfig: '#020103',
-    riskLevel: '低风险错误',
-    enabled: false,
-  },
-  {
-    id: '9',
-    dimension: '对话',
-    category: '人设一致性',
-    subCategory: '世界观视角',
-    standard: '世界观视角偏离',
-    description:
-      '解释事物的基于『游戏世界观』/『拟组织身份』的视角展开，不应站在现实世界的视角进行说明',
-    errorCodeConfig: '#020104',
-    riskLevel: '中风险错误',
-    enabled: false,
-  },
-  {
-    id: '10',
-    dimension: '对话',
-    category: '人设一致性',
-    subCategory: '长会话稳定性',
-    standard: '长会话稳定性偏差',
-    description:
-      '在多轮、长时间对话情境下（例如：反复被诱导），角色人设不应崩塌、遗忘或前后矛盾，需保持始终一致的态度与说话风格',
-    errorCodeConfig: '#020105',
-    riskLevel: '低风险错误',
-    enabled: false,
-  },
-  {
-    id: '11',
-    dimension: '对话',
-    category: '拟人尺度',
-    subCategory: '急躁/过度共情',
-    standard: '急躁/爱心过度共情化倾向',
-    description:
-      '急躁、着急表达过度的共情、认同，或过度、感性表达情感，导致像误导玩家人以为对方是真人',
-    errorCodeConfig: '#030101',
-    riskLevel: '低风险错误',
-    enabled: false,
-  },
-]
+type LevelKey = 'dimension' | 'category' | 'subCategory' | 'standard'
+type EditableField = LevelKey | 'description' | 'errorCodeConfig' | 'riskLevel'
+
+const initialRows: StandardRow[] = DEFAULT_QUALITY_STANDARD_ROWS.map((row) => ({ ...row }))
 
 const TEMPLATE_HEADERS = ['整体维度', '大类', '小类', '标准', '回复标准说明', '错误码', '错误等级', '错误项说明']
-const VALID_RISK_LEVELS = ['低风险错误', '中风险错误', '高风险错误', '极高风险错误']
+const VALID_RISK_LEVELS = RISK_LEVELS
+const INLINE_EDIT_INPUT_CLASS = 'w-full h-7 rounded border border-blue-300 bg-white px-2 text-xs text-gray-700 outline-none focus:ring-1 focus:ring-blue-300'
+const INLINE_EDIT_SELECT_CLASS = 'h-7 rounded border border-blue-300 bg-white px-2 text-xs text-gray-700 outline-none focus:ring-1 focus:ring-blue-300'
+const INLINE_EDIT_TEXT_CLASS =
+  'cursor-text inline-flex min-h-[20px] w-full items-center rounded px-1 -mx-1 text-gray-700 hover:bg-blue-50/70 transition-colors'
 
 type ImportStep = 'intro' | 'select' | 'errors' | null
 
@@ -169,31 +59,324 @@ interface ImportErrorItem {
   reason: string
 }
 
+interface DeleteConfirmPlan {
+  level: LevelKey
+  target: string
+  affectedIds: string[]
+  standardCount: number
+  errorCodeCount: number
+}
+
+function createRow(seed?: Partial<StandardRow>): StandardRow {
+  return {
+    id: `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+    dimension: '',
+    category: '',
+    subCategory: '',
+    standard: '',
+    description: '',
+    errorCodeConfig: '#000000',
+    riskLevel: '低风险错误',
+    enabled: false,
+    ...seed,
+  }
+}
+
+function askInput(title: string, fallback = '') {
+  const value = window.prompt(title, fallback)
+  if (value == null) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed
+}
+
+function requireDoubleConfirm(actionText: string, targetText: string) {
+  const first = window.confirm(`确认执行「${actionText}」？\n\n对象：${targetText}`)
+  if (!first) return false
+  return window.confirm('再次确认：该操作将影响当前标准结构，是否继续？')
+}
+
+function levelLabel(level: LevelKey) {
+  if (level === 'dimension') return '维度'
+  if (level === 'category') return '大类'
+  if (level === 'subCategory') return '小类'
+  return '标准'
+}
+
 export default function OnlineQualityStandards() {
   const [rows, setRows] = useState<StandardRow[]>(initialRows)
-  const { getCurrentChannel, getCurrentProject } = useOnlineChannelStore()
+  const { getCurrentChannel } = useOnlineChannelStore()
   const currentChannel = getCurrentChannel()
-  const currentProject = getCurrentProject()
 
   const [importStep, setImportStep] = useState<ImportStep>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileCheckPassed, setFileCheckPassed] = useState(false)
   const [importErrors, setImportErrors] = useState<ImportErrorItem[]>([])
+  const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<DeleteConfirmPlan | null>(null)
+  const [editingCell, setEditingCell] = useState<{ rowId: string; field: EditableField } | null>(null)
+  const [editingValue, setEditingValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const toggleRow = (id: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)))
+  const getSameLevelIndexes = (level: LevelKey, row: StandardRow, source: StandardRow[]) => {
+    if (level === 'dimension') {
+      return source.reduce<number[]>((acc, item, idx) => {
+        if (item.dimension === row.dimension) acc.push(idx)
+        return acc
+      }, [])
+    }
+    if (level === 'category') {
+      return source.reduce<number[]>((acc, item, idx) => {
+        if (item.dimension === row.dimension && item.category === row.category) acc.push(idx)
+        return acc
+      }, [])
+    }
+    if (level === 'subCategory') {
+      return source.reduce<number[]>((acc, item, idx) => {
+        if (item.dimension === row.dimension && item.category === row.category && item.subCategory === row.subCategory) {
+          acc.push(idx)
+        }
+        return acc
+      }, [])
+    }
+    return source.reduce<number[]>((acc, item, idx) => {
+      if (item.id === row.id) acc.push(idx)
+      return acc
+    }, [])
+  }
+
+  const insertAfterIndexes = (source: StandardRow[], indexes: number[], newRows: StandardRow[]) => {
+    if (indexes.length === 0) {
+      return [...source, ...newRows]
+    }
+    const next = [...source]
+    const insertAt = Math.max(...indexes) + 1
+    next.splice(insertAt, 0, ...newRows)
+    return next
+  }
+
+  const handleAddSibling = (level: LevelKey, row: StandardRow) => {
+    if (!requireDoubleConfirm(`新增同级${levelLabel(level)}`, level === 'standard' ? row.standard || '空标准' : row[level])) return
+
+    setRows((prev) => {
+      const indexes = getSameLevelIndexes(level, row, prev)
+
+      if (level === 'dimension') {
+        const name = askInput('请输入新维度名称')
+        if (!name) return prev
+        return insertAfterIndexes(prev, indexes, [createRow({ dimension: name })])
+      }
+
+      if (level === 'category') {
+        if (!row.dimension) return prev
+        const name = askInput('请输入新大类名称')
+        if (!name) return prev
+        return insertAfterIndexes(prev, indexes, [createRow({ dimension: row.dimension, category: name })])
+      }
+
+      if (level === 'subCategory') {
+        if (!row.dimension || !row.category) return prev
+        const name = askInput('请输入新小类名称')
+        if (!name) return prev
+        return insertAfterIndexes(prev, indexes, [createRow({ dimension: row.dimension, category: row.category, subCategory: name })])
+      }
+
+      if (!row.dimension || !row.category || !row.subCategory) return prev
+      const standard = askInput('请输入标准名称')
+      if (!standard) return prev
+      const description = askInput('请输入标准说明', '待补充') || '待补充'
+      const errorCodeConfig = askInput('请输入错误码（如 #010201）', '#010201') || '#010201'
+      const riskInput = askInput(`请输入错误等级（${VALID_RISK_LEVELS.join(' / ')}）`, '低风险错误') || '低风险错误'
+      const riskLevel = normalizeRiskLevel(riskInput)
+
+      return insertAfterIndexes(prev, indexes, [
+        createRow({
+          dimension: row.dimension,
+          category: row.category,
+          subCategory: row.subCategory,
+          standard,
+          description,
+          errorCodeConfig,
+          riskLevel,
+        }),
+      ])
+    })
+  }
+
+  const handleEditLevel = (level: LevelKey, row: StandardRow) => {
+    const target = level === 'standard' ? row.standard || '空标准' : row[level]
+    if (!target) return
+    if (!requireDoubleConfirm(`编辑${levelLabel(level)}`, target)) return
+
+    setRows((prev) => {
+      const indexes = getSameLevelIndexes(level, row, prev)
+      if (indexes.length === 0) return prev
+      const next = [...prev]
+
+      if (level === 'standard') {
+        const base = next[indexes[0]]
+        const standard = askInput('请输入新的标准名称', base.standard)
+        if (!standard) return prev
+        const description = askInput('请输入新的标准说明', base.description) || base.description
+        const errorCodeConfig = askInput('请输入新的错误码', base.errorCodeConfig) || base.errorCodeConfig
+        const riskInput = askInput(`请输入错误等级（${VALID_RISK_LEVELS.join(' / ')}）`, base.riskLevel) || base.riskLevel
+        const riskLevel = normalizeRiskLevel(riskInput)
+
+        next[indexes[0]] = { ...base, standard, description, errorCodeConfig, riskLevel }
+        return next
+      }
+
+      const label = levelLabel(level)
+      const oldValue = next[indexes[0]][level]
+      const newValue = askInput(`请输入新的${label}名称`, oldValue)
+      if (!newValue) return prev
+      indexes.forEach((idx) => {
+        next[idx] = { ...next[idx], [level]: newValue }
+      })
+      return next
+    })
+  }
+
+  const handleDeleteLevel = (level: LevelKey, row: StandardRow) => {
+    const target = level === 'standard' ? row.standard || '空标准' : row[level]
+    if (!target) return
+
+    const indexes = getSameLevelIndexes(level, row, rows)
+    if (indexes.length === 0) return
+
+    const affectedRows = indexes.map((idx) => rows[idx])
+    const standardCount = new Set(affectedRows.map((item) => item.standard).filter((item) => item.trim().length > 0)).size
+    const errorCodeCount = new Set(affectedRows.map((item) => item.errorCodeConfig).filter((item) => item.trim().length > 0)).size
+
+    setDeleteConfirmPlan({
+      level,
+      target,
+      affectedIds: affectedRows.map((item) => item.id),
+      standardCount,
+      errorCodeCount,
+    })
+  }
+
+  const confirmDeleteLevel = () => {
+    if (!deleteConfirmPlan) return
+
+    setRows((prev) => {
+      const deleted = new Set(deleteConfirmPlan.affectedIds)
+      const remaining = prev.filter((item) => !deleted.has(item.id))
+      return remaining.length > 0 ? remaining : [createRow()]
+    })
+    setDeleteConfirmPlan(null)
+  }
+
+  const handleAddDefinition = (level: LevelKey, row: StandardRow) => {
+    if (!requireDoubleConfirm(`新增${levelLabel(level)}定义`, `行 ${row.id}`)) return
+
+    setRows((prev) => {
+      const idx = prev.findIndex((r) => r.id === row.id)
+      if (idx < 0) return prev
+      const next = [...prev]
+      const target = { ...next[idx] }
+
+      if (level === 'dimension') {
+        const name = askInput('请输入维度定义')
+        if (!name) return prev
+        target.dimension = name
+      }
+
+      if (level === 'category') {
+        if (!target.dimension) {
+          window.alert('请先定义维度')
+          return prev
+        }
+        const name = askInput('请输入大类定义')
+        if (!name) return prev
+        target.category = name
+      }
+
+      if (level === 'subCategory') {
+        if (!target.dimension || !target.category) {
+          window.alert('请先定义维度和大类')
+          return prev
+        }
+        const name = askInput('请输入小类定义')
+        if (!name) return prev
+        target.subCategory = name
+      }
+
+      if (level === 'standard') {
+        if (!target.dimension || !target.category || !target.subCategory) {
+          window.alert('请先定义维度/大类/小类')
+          return prev
+        }
+        const standard = askInput('请输入标准名称')
+        if (!standard) return prev
+        const description = askInput('请输入标准说明', '待补充') || '待补充'
+        const errorCodeConfig = askInput('请输入错误码（如 #010201）', '#010201') || '#010201'
+        const riskInput = askInput(`请输入错误等级（${VALID_RISK_LEVELS.join(' / ')}）`, '低风险错误') || '低风险错误'
+
+        target.standard = standard
+        target.description = description
+        target.errorCodeConfig = errorCodeConfig
+        target.riskLevel = normalizeRiskLevel(riskInput)
+      }
+
+      next[idx] = target
+      return next
+    })
+  }
+
+  const beginCellEdit = (row: StandardRow, field: EditableField) => {
+    setEditingCell({ rowId: row.id, field })
+    if (field === 'riskLevel') {
+      setEditingValue(normalizeRiskLevel(row.riskLevel))
+      return
+    }
+    setEditingValue((row[field] ?? '').toString())
+  }
+
+  const commitCellEdit = () => {
+    if (!editingCell) return
+
+    setRows((prev) => {
+      const idx = prev.findIndex((item) => item.id === editingCell.rowId)
+      if (idx < 0) return prev
+
+      const next = [...prev]
+      const base = next[idx]
+
+      if (editingCell.field === 'description' || editingCell.field === 'errorCodeConfig') {
+        next[idx] = { ...base, [editingCell.field]: editingValue.trim() }
+        return next
+      }
+
+      if (editingCell.field === 'riskLevel') {
+        next[idx] = { ...base, riskLevel: normalizeRiskLevel(editingValue) }
+        return next
+      }
+
+      const level = editingCell.field as LevelKey
+      const indexes = getSameLevelIndexes(level, base, prev)
+      indexes.forEach((targetIdx) => {
+        next[targetIdx] = { ...next[targetIdx], [level]: editingValue.trim() }
+      })
+      return next
+    })
+
+    setEditingCell(null)
+    setEditingValue('')
+  }
+
+  const cancelCellEdit = () => {
+    setEditingCell(null)
+    setEditingValue('')
   }
 
   // ---------------- 子需求 5：质检标准导入与模板下载 ----------------
   const handleDownloadTemplate = () => {
     const wb = XLSX.utils.book_new()
 
-    // Sheet1: 导入模板（仅表头 + 空白数据区）
     const templateSheet = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS])
     XLSX.utils.book_append_sheet(wb, templateSheet, '导入模板')
 
-    // Sheet2: 填写说明
     const instructionRows = [
       ['知几标注标准 - 导入模板填写说明'],
       [],
@@ -206,7 +389,7 @@ export default function OnlineQualityStandards() {
       ['· 错误码需保留 # 前缀，同一错误码必须唯一'],
       [],
       ['三、错误等级顺序'],
-      ['低风险错误 < 中风险错误 < 高风险错误 < 极高风险错误'],
+      ['无风险 < 低风险错误 < 中风险错误 < 高风险错误 < 极高风险错误'],
       [],
       ['四、整体判定标准'],
       ['优秀 = 无任何问题出现'],
@@ -216,7 +399,6 @@ export default function OnlineQualityStandards() {
     const instructionSheet = XLSX.utils.aoa_to_sheet(instructionRows)
     XLSX.utils.book_append_sheet(wb, instructionSheet, '填写说明')
 
-    // Sheet3: 通用标准参考（与导入模板结构一致，附示例数据供复制）
     const referenceRows = [
       TEMPLATE_HEADERS,
       ['对话', '称呼与表达规范', '对玩家的称呼', '对玩家的称呼', '禁止只用模糊称谓，应使用具体游戏昵称等称谓', '#010101', '中风险错误', '使用了模糊或不当的称谓'],
@@ -232,7 +414,6 @@ export default function OnlineQualityStandards() {
     const file = e.target.files?.[0]
     if (!file) return
     setSelectedFile(file)
-    // 前端预检查：仅允许 .xlsx，大小不超过 10MB
     const isXlsx = file.name.toLowerCase().endsWith('.xlsx')
     const isSizeOk = file.size <= 10 * 1024 * 1024
     setFileCheckPassed(isXlsx && isSizeOk)
@@ -241,7 +422,6 @@ export default function OnlineQualityStandards() {
 
   const handleStartValidateImport = () => {
     if (!selectedFile) return
-    // 模拟后台校验：随机演示一次失败场景，展示逐条错误明细
     const mockErrors: ImportErrorItem[] = [
       { row: 5, field: '错误等级', reason: '值"高危"不合法，仅允许4个合法值' },
       { row: 12, field: '错误码', reason: '错误码未保留 # 前缀（当前: ER0001）' },
@@ -259,7 +439,6 @@ export default function OnlineQualityStandards() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // ---------------- 子需求 12：导出（含合格率统计汇总）----------------
   const handleExportConfig = () => {
     const wb = XLSX.utils.book_new()
     const exportRows = [
@@ -271,37 +450,97 @@ export default function OnlineQualityStandards() {
     XLSX.writeFile(wb, `质检标准配置_${currentChannel?.name ?? ''}_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
-  // 计算每个大类连续行数用于合并展示
-  const getRowSpanInfo = () => {
+  const rowSpanInfo = useMemo(() => {
     const info: { dimensionSpan: number; categorySpan: number; isFirstOfDimension: boolean; isFirstOfCategory: boolean }[] = []
     rows.forEach((row, idx) => {
       const isFirstOfDimension = idx === 0 || rows[idx - 1].dimension !== row.dimension
-      const isFirstOfCategory =
-        idx === 0 || rows[idx - 1].category !== row.category || rows[idx - 1].dimension !== row.dimension
+      const isFirstOfCategory = idx === 0 || rows[idx - 1].category !== row.category || rows[idx - 1].dimension !== row.dimension
+
       let dimensionSpan = 0
       if (isFirstOfDimension) {
         for (let i = idx; i < rows.length && rows[i].dimension === row.dimension; i++) dimensionSpan++
       }
+
       let categorySpan = 0
       if (isFirstOfCategory) {
-        for (
-          let i = idx;
-          i < rows.length && rows[i].category === row.category && rows[i].dimension === row.dimension;
-          i++
-        )
-          categorySpan++
+        for (let i = idx; i < rows.length && rows[i].dimension === row.dimension && rows[i].category === row.category; i++) categorySpan++
       }
+
       info.push({ dimensionSpan, categorySpan, isFirstOfDimension, isFirstOfCategory })
     })
     return info
+  }, [rows])
+
+  const renderLevelCell = (row: StandardRow, level: LevelKey, value: string) => {
+    const hasValue = Boolean(value?.trim())
+    const isEditing = editingCell?.rowId === row.id && editingCell.field === level
+
+    return (
+      <div className="group relative min-h-[32px] pb-4 pr-10">
+        {isEditing ? (
+          <input
+            autoFocus
+            value={editingValue}
+            onChange={(e) => setEditingValue(e.target.value)}
+            onBlur={commitCellEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitCellEdit()
+              if (e.key === 'Escape') cancelCellEdit()
+            }}
+            className={INLINE_EDIT_INPUT_CLASS}
+          />
+        ) : hasValue ? (
+          <span className={INLINE_EDIT_TEXT_CLASS} onDoubleClick={() => beginCellEdit(row, level)} title="双击编辑">
+            {value}
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="text-blue-600 hover:text-blue-700 text-[11px]"
+            onClick={() => handleAddDefinition(level, row)}
+          >
+            + 添加{levelLabel(level)}定义
+          </button>
+        )}
+
+        {!isEditing && (
+          <div className="absolute right-0 bottom-0 hidden group-hover:flex items-center gap-1">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-4 w-4 rounded text-blue-600 hover:bg-blue-50"
+              title="新增同级"
+              aria-label="新增同级"
+              onClick={() => handleAddSibling(level, row)}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center h-4 w-4 rounded text-gray-500 hover:bg-gray-100"
+                  title="更多操作"
+                  aria-label="更多操作"
+                >
+                  <MoreHorizontal className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-28">
+                <DropdownMenuItem onClick={() => handleEditLevel(level, row)}>编辑</DropdownMenuItem>
+                <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onClick={() => handleDeleteLevel(level, row)}>
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
+    )
   }
 
-  const rowSpanInfo = getRowSpanInfo()
-
   return (
-    <OnlineLayout showGlobalSwitch>
+    <OnlineLayout>
       <div className="flex h-full">
-        {/* 主内容 */}
         <div className="flex-1 overflow-auto p-4">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-sm font-semibold text-gray-900">质检标准配置</h1>
@@ -318,72 +557,110 @@ export default function OnlineQualityStandards() {
                 导出配置
               </Button>
             </div>
-            <Button size="sm" className="text-xs h-8 bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              新增标准
-            </Button>
+            <div className="text-[11px] text-gray-400">从左到右逐层维护：维度 → 大类 → 小类 → 标准</div>
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 border-b border-gray-200">
-                  <th className="px-3 py-2.5 text-left font-medium w-16">维度</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-24">大类</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-28">小类</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-32">标准</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-20">维度</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-28">大类</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-32">小类</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-36">标准</th>
                   <th className="px-3 py-2.5 text-left font-medium">标准说明</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-28">错误码配置项</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-24">错误等级</th>
-                  <th className="px-3 py-2.5 text-left font-medium w-16">操作</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-32">错误码配置项</th>
+                  <th className="px-3 py-2.5 text-left font-medium w-28">错误等级</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
                   const info = rowSpanInfo[idx]
                   const style = RISK_LEVEL_STYLE[normalizeRiskLevel(row.riskLevel)]
+
                   return (
-                    <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/60">
+                    <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/60 align-top">
                       {info.isFirstOfDimension ? (
-                        <td
-                          rowSpan={info.dimensionSpan}
-                          className="px-3 py-2.5 align-top text-gray-700 border-r border-gray-100"
-                        >
-                          {row.dimension}
+                        <td rowSpan={info.dimensionSpan} className="px-3 py-2.5 border-r border-gray-100 text-gray-700">
+                          {renderLevelCell(row, 'dimension', row.dimension)}
                         </td>
                       ) : null}
+
                       {info.isFirstOfCategory ? (
-                        <td
-                          rowSpan={info.categorySpan}
-                          className="px-3 py-2.5 align-top text-gray-700 border-r border-gray-100"
-                        >
-                          {row.category}
+                        <td rowSpan={info.categorySpan} className="px-3 py-2.5 border-r border-gray-100 text-gray-700">
+                          {renderLevelCell(row, 'category', row.category)}
                         </td>
                       ) : null}
-                      <td className="px-3 py-2.5 align-top text-gray-700 border-r border-gray-100">
-                        {row.subCategory}
+
+                      <td className="px-3 py-2.5 border-r border-gray-100 text-gray-700">{renderLevelCell(row, 'subCategory', row.subCategory)}</td>
+
+                      <td className="px-3 py-2.5 border-r border-gray-100 text-gray-700">{renderLevelCell(row, 'standard', row.standard)}</td>
+
+                      <td className="px-3 py-2.5 border-r border-gray-100 text-gray-500 leading-5 max-w-md whitespace-pre-wrap break-words">
+                        {editingCell?.rowId === row.id && editingCell.field === 'description' ? (
+                          <input
+                            autoFocus
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={commitCellEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitCellEdit()
+                              if (e.key === 'Escape') cancelCellEdit()
+                            }}
+                            className={INLINE_EDIT_INPUT_CLASS}
+                          />
+                        ) : (
+                          <span className={INLINE_EDIT_TEXT_CLASS} onDoubleClick={() => beginCellEdit(row, 'description')} title="双击编辑">
+                            {row.description || '-'}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-3 py-2.5 align-top text-gray-900 border-r border-gray-100 whitespace-nowrap">
-                        {row.standard}
+
+                      <td className="px-3 py-2.5 border-r border-gray-100 text-blue-600">
+                        {editingCell?.rowId === row.id && editingCell.field === 'errorCodeConfig' ? (
+                          <input
+                            autoFocus
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={commitCellEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitCellEdit()
+                              if (e.key === 'Escape') cancelCellEdit()
+                            }}
+                            className={INLINE_EDIT_INPUT_CLASS}
+                          />
+                        ) : (
+                          <span className={INLINE_EDIT_TEXT_CLASS} onDoubleClick={() => beginCellEdit(row, 'errorCodeConfig')} title="双击编辑">
+                            {row.errorCodeConfig || '-'}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-3 py-2.5 align-top text-gray-500 leading-5 border-r border-gray-100 max-w-md">
-                        {row.description}
-                      </td>
-                      <td className="px-3 py-2.5 align-top text-gray-700 border-r border-gray-100">
-                        <span className="text-blue-600">{row.errorCodeConfig}</span>
-                        <span className="text-gray-300 mx-1">···</span>
-                        <MoreHorizontal className="inline w-3 h-3 text-gray-300" />
-                      </td>
-                      <td className="px-3 py-2.5 align-top border-r border-gray-100">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${style.badge}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                          {row.riskLevel}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 align-top">
-                        <Switch checked={row.enabled} onCheckedChange={() => toggleRow(row.id)} />
+
+                      <td className="px-3 py-2.5">
+                        {editingCell?.rowId === row.id && editingCell.field === 'riskLevel' ? (
+                          <select
+                            autoFocus
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={commitCellEdit}
+                            className={INLINE_EDIT_SELECT_CLASS}
+                          >
+                            {VALID_RISK_LEVELS.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${style.badge} cursor-pointer`}
+                            onDoubleClick={() => beginCellEdit(row, 'riskLevel')}
+                            title="双击编辑"
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                            {row.riskLevel}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -394,7 +671,6 @@ export default function OnlineQualityStandards() {
         </div>
       </div>
 
-      {/* ---------------- 子需求5：导入说明弹窗 step1 ---------------- */}
       <Dialog open={importStep === 'intro'} onOpenChange={(open) => !open && closeImportDialog()}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -415,15 +691,7 @@ export default function OnlineQualityStandards() {
             </div>
             <div>
               <div className="font-medium text-gray-900 mb-1">错误等级</div>
-              低风险错误 &lt; 中风险错误 &lt; 高风险错误 &lt; 极高风险错误
-            </div>
-            <div>
-              <div className="font-medium text-gray-900 mb-1">整体判定标准</div>
-              优秀 = 无任何问题出现
-              <br />
-              合格 = 无高/极高风险场景出现
-              <br />
-              不合格 = 出现任意一个高/极高风险场景
+              无风险 &lt; 低风险错误 &lt; 中风险错误 &lt; 高风险错误 &lt; 极高风险错误
             </div>
           </div>
           <DialogFooter className="flex items-center sm:justify-between">
@@ -443,10 +711,8 @@ export default function OnlineQualityStandards() {
         </DialogContent>
       </Dialog>
 
-      {/* 隐藏的文件选择器 */}
       <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleFileSelect} />
 
-      {/* ---------------- 子需求5：文件预检查 step2 ---------------- */}
       <Dialog open={importStep === 'select'} onOpenChange={(open) => !open && closeImportDialog()}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -484,19 +750,13 @@ export default function OnlineQualityStandards() {
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
               重新选择
             </Button>
-            <Button
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={!fileCheckPassed}
-              onClick={handleStartValidateImport}
-            >
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" disabled={!fileCheckPassed} onClick={handleStartValidateImport}>
               开始校验并导入
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ---------------- 子需求5：校验错误反馈 step3 ---------------- */}
       <Dialog open={importStep === 'errors'} onOpenChange={(open) => !open && closeImportDialog()}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -530,6 +790,34 @@ export default function OnlineQualityStandards() {
               }}
             >
               重新选择文件
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteConfirmPlan} onOpenChange={(open) => !open && setDeleteConfirmPlan(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除{deleteConfirmPlan ? levelLabel(deleteConfirmPlan.level) : ''}确认</DialogTitle>
+          </DialogHeader>
+
+          <div className="text-sm text-gray-600 space-y-2">
+            <p>
+              即将删除：<span className="font-medium text-gray-900">{deleteConfirmPlan?.target ?? '-'}</span>
+            </p>
+            <p className="text-rose-600">该操作不可撤销，请确认是否继续。</p>
+            <div className="rounded-md border border-rose-100 bg-rose-50/60 px-3 py-2 text-xs text-rose-700 leading-5">
+              将删除标准 <span className="font-semibold">{deleteConfirmPlan?.standardCount ?? 0}</span> 条，关联错误码{' '}
+              <span className="font-semibold">{deleteConfirmPlan?.errorCodeCount ?? 0}</span> 条。
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirmPlan(null)}>
+              取消
+            </Button>
+            <Button size="sm" className="bg-rose-600 hover:bg-rose-700" onClick={confirmDeleteLevel}>
+              确认删除
             </Button>
           </DialogFooter>
         </DialogContent>

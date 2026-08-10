@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useNavigate } from 'react-router-dom'
 import OnlineLayout from '@/components/online-layout'
+import TaskCreationDialog from '@/components/task-creation-dialog-new'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -12,251 +13,265 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { ChevronDown, Search, MoreHorizontal, Download } from 'lucide-react'
-import { RISK_LEVELS, RiskLevel } from '@/store/onlineStore'
+import ExportResultDialog from '@/components/export-result-dialog'
+import { ChevronDown, MoreHorizontal, Plus, Search } from 'lucide-react'
+import { RiskLevel, useOnlineChannelStore } from '@/store/onlineStore'
+
+type TaskStatus = '进行中' | '待分配' | '待处理'
+
+type PageMode = 'task' | 'trigger'
 
 interface OnlineTask {
   id: string
+  projectId: string
+  channelId: string
   name: string
-  status: '进行中' | '待分配' | '待处理'
+  status: TaskStatus
   sourceScene: string
   sourceEvent: string
   channel: string
-  scope: string
   createdAt: string
   progressDone: number
   progressTotal: number
 }
 
-const statusStyle: Record<OnlineTask['status'], string> = {
+interface TriggerCard {
+  id: string
+  projectId: string
+  channelId: string
+  name: string
+  status: '启用' | '停用'
+  sourceScene: string
+  sourceEvent: string
+  channel: string
+  latestRunAt: string
+}
+
+const statusStyle: Record<TaskStatus, string> = {
   进行中: 'bg-blue-100 text-blue-600 border-blue-200',
-  待分配: 'bg-orange-100 text-orange-600 border-orange-200',
+  待分配: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   待处理: 'bg-gray-100 text-gray-500 border-gray-200',
+}
+
+const triggerStatusStyle: Record<TriggerCard['status'], string> = {
+  启用: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  停用: 'bg-gray-100 text-gray-500 border-gray-200',
 }
 
 const mockTasks: OnlineTask[] = [
   {
     id: 'test',
+    projectId: 'p_21116',
+    channelId: 'sdk',
     name: 'test',
     status: '进行中',
-    sourceScene: 'CodeV 无我要玩助手',
+    sourceScene: 'CodeV 无要玩助手',
     sourceEvent: '测量行动(21116)',
     channel: 'SDK',
-    scope: '简介: -',
     createdAt: '2026/07/22',
     progressDone: 2,
     progressTotal: 587,
   },
   {
-    id: 'test2',
-    name: 'test',
+    id: 'test-2',
+    projectId: 'p_21116',
+    channelId: 'weixin',
+    name: 'test-微信',
     status: '待处理',
-    sourceScene: 'CodeV 无我要玩助手',
+    sourceScene: 'CodeV 无要玩助手',
     sourceEvent: '测量行动(21116)',
-    channel: 'SDK',
-    scope: '简介: -',
+    channel: '微信',
     createdAt: '2026/07/22',
     progressDone: 0,
     progressTotal: 587,
   },
   {
-    id: 'wsst5',
+    id: 'wss',
+    projectId: 'p_21200',
+    channelId: 'sdk',
     name: '瓦手试点5',
     status: '待分配',
-    sourceScene: 'CodeV 无我要玩助手',
-    sourceEvent: '测量打行动(21116)',
+    sourceScene: '甄选离线质检agent',
+    sourceEvent: '离线回归(21200)',
     channel: 'SDK',
-    scope: '简介: -',
     createdAt: '2026/04/17',
     progressDone: 0,
     progressTotal: 498,
   },
   {
-    id: 'wsst5-2',
-    name: '瓦手试点5',
+    id: 'wss-qa',
+    projectId: 'p_21200',
+    channelId: 'app',
+    name: '瓦手试点5 QA',
     status: '待分配',
-    sourceScene: 'CodeV 无我要玩助手',
-    sourceEvent: '测量打行动(21116)',
-    channel: 'SDK',
-    scope: '简介: -',
-    createdAt: '2026/04/17',
+    sourceScene: '甄选离线质检agent',
+    sourceEvent: '离线回归(21200)',
+    channel: 'App',
+    createdAt: '2026/04/14',
     progressDone: 0,
-    progressTotal: 498,
+    progressTotal: 518,
+  },
+  {
+    id: 'wss-2',
+    projectId: 'p_1116',
+    channelId: 'web',
+    name: '瓦手试点-Web',
+    status: '待分配',
+    sourceScene: 'Codixir:测试平台',
+    sourceEvent: '线上灰度(1116)',
+    channel: 'Web',
+    createdAt: '2026/04/14',
+    progressDone: 0,
+    progressTotal: 430,
   },
 ]
 
-// mock 标注结果原始数据，用于导出筛选/去重演示（子需求 6、12）
-interface AnnotationRecord {
-  taskId: string
-  recordId: string
-  question: string
-  riskLevel: RiskLevel | null
-  errorCode: string
-  annotator: string
-  annotatedAt: string // ISO date
-}
-
-const MOCK_ANNOTATORS = ['张三', '李四', '王五']
-
-function buildMockAnnotationRecords(): AnnotationRecord[] {
-  const records: AnnotationRecord[] = []
-  const baseQuestions = ['充值没到账怎么办', '怎么下载游戏', '我的角色被误封了', '这个副本怎么打', '最近有什么活动']
-  const levels: (RiskLevel | null)[] = ['极高风险错误', '低风险错误', '高风险错误', '中风险错误', null]
-  const codes = ['#010105', '#020103', '#020101', '#020104', '']
-  let seq = 0
-  for (const task of mockTasks) {
-    for (let i = 0; i < 5; i++) {
-      seq++
-      // 模拟同一条数据被同一标注人多次标注（用于去重演示）
-      const times = i === 0 ? 2 : 1
-      for (let t = 0; t < times; t++) {
-        records.push({
-          taskId: task.id,
-          recordId: `${task.id}-${i}`,
-          question: baseQuestions[i],
-          riskLevel: levels[i],
-          errorCode: codes[i],
-          annotator: MOCK_ANNOTATORS[seq % MOCK_ANNOTATORS.length],
-          annotatedAt: `2026-07-${String(10 + (seq % 20)).padStart(2, '0')}`,
-        })
-      }
-    }
-  }
-  return records
-}
-
-const MOCK_ANNOTATION_RECORDS = buildMockAnnotationRecords()
+const mockTriggers: TriggerCard[] = [
+  {
+    id: 'tg-1',
+    projectId: 'p_21116',
+    channelId: 'sdk',
+    name: 'test',
+    status: '启用',
+    sourceScene: 'CodeV 无要玩助手',
+    sourceEvent: '测量行动(21116)',
+    channel: 'SDK',
+    latestRunAt: '2026-07-17 10:26:58',
+  },
+  {
+    id: 'tg-2',
+    projectId: 'p_21116',
+    channelId: 'weixin',
+    name: '手广试点5',
+    status: '启用',
+    sourceScene: 'CodeV 无要玩助手',
+    sourceEvent: '测量行动(21116)',
+    channel: '微信',
+    latestRunAt: '2026-04-17 10:26:58',
+  },
+  {
+    id: 'tg-3',
+    projectId: 'p_21200',
+    channelId: 'app',
+    name: '瓦手试点-App',
+    status: '启用',
+    sourceScene: '甄选离线质检agent',
+    sourceEvent: '离线回归(21200)',
+    channel: 'App',
+    latestRunAt: '2026-04-14 13:06',
+  },
+]
 
 export default function OnlineTaskList() {
   const navigate = useNavigate()
+  const [pageMode, setPageMode] = useState<PageMode>('task')
   const [searchQuery, setSearchQuery] = useState('')
-  const [filter, setFilter] = useState('all')
-
-  // ---------------- 子需求 12：导出筛选面板 ----------------
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
-  const [selectedRiskLevels, setSelectedRiskLevels] = useState<RiskLevel[]>([])
-  const [errorCodeQuery, setErrorCodeQuery] = useState('')
-  const [annotatorQuery, setAnnotatorQuery] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [selectedTaskForExport, setSelectedTaskForExport] = useState<OnlineTask | null>(null)
+  const [exportRiskLevels, setExportRiskLevels] = useState<RiskLevel[]>([])
+  const [exportErrorCodeKeyword, setExportErrorCodeKeyword] = useState('')
+  const [exportAnnotators, setExportAnnotators] = useState<string[]>([])
 
-  const toggleRiskLevel = (level: RiskLevel) => {
-    setSelectedRiskLevels((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]))
-  }
+  const { getCurrentProject, getCurrentChannel } = useOnlineChannelStore()
+  const currentProject = getCurrentProject()
+  const currentChannel = getCurrentChannel()
 
-  // 去重：同一标注人对同一数据的多次标注仅保留最后一次
-  const dedupedRecords = useMemo(() => {
-    const map = new Map<string, AnnotationRecord>()
-    for (const rec of MOCK_ANNOTATION_RECORDS) {
-      const key = `${rec.recordId}__${rec.annotator}`
-      // 由于数组已按顺序追加，后写入的即为"最后一次"，直接覆盖
-      map.set(key, rec)
+  const scopedTasks = useMemo(() => {
+    return mockTasks.filter((task) => {
+      if (!currentProject || !currentChannel) return true
+      return task.projectId === currentProject.id && task.channelId === currentChannel.id
+    })
+  }, [currentProject, currentChannel])
+
+  const scopedTriggers = useMemo(() => {
+    return mockTriggers.filter((trigger) => {
+      if (!currentProject || !currentChannel) return true
+      return trigger.projectId === currentProject.id && trigger.channelId === currentChannel.id
+    })
+  }, [currentProject, currentChannel])
+
+  const filteredTasks = useMemo(() => {
+    return scopedTasks.filter((task) => {
+      const keyword = searchQuery.trim().toLowerCase()
+      const matchKeyword =
+        !keyword ||
+        task.name.toLowerCase().includes(keyword) ||
+        task.sourceScene.toLowerCase().includes(keyword) ||
+        task.sourceEvent.toLowerCase().includes(keyword)
+
+      const matchStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'progress' && task.status === '进行中') ||
+        (statusFilter === 'pending' && task.status === '待分配') ||
+        (statusFilter === 'todo' && task.status === '待处理')
+
+      return matchKeyword && matchStatus
+    })
+  }, [scopedTasks, searchQuery, statusFilter])
+
+  const filteredTriggers = useMemo(() => {
+    return scopedTriggers.filter((trigger) => {
+      const keyword = searchQuery.trim().toLowerCase()
+      const matchKeyword =
+        !keyword ||
+        trigger.name.toLowerCase().includes(keyword) ||
+        trigger.sourceScene.toLowerCase().includes(keyword) ||
+        trigger.sourceEvent.toLowerCase().includes(keyword)
+
+      const matchStatus = statusFilter === 'all' || (statusFilter === 'progress' && trigger.status === '启用')
+      return matchKeyword && matchStatus
+    })
+  }, [scopedTriggers, searchQuery, statusFilter])
+
+  const exportAnnotatorOptions = useMemo(() => {
+    return Array.from(new Set(scopedTasks.map((task) => task.name).filter((name) => name.trim().length > 0))).sort((a, b) =>
+      a.localeCompare(b, 'zh-Hans-CN')
+    )
+  }, [scopedTasks])
+
+  const handleTaskExport = () => {
+    if (!selectedTaskForExport) return
+    const row = {
+      任务ID: selectedTaskForExport.id,
+      任务名称: selectedTaskForExport.name,
+      状态: selectedTaskForExport.status,
+      项目: selectedTaskForExport.sourceScene,
+      事件: selectedTaskForExport.sourceEvent,
+      渠道: selectedTaskForExport.channel,
+      创建时间: selectedTaskForExport.createdAt,
+      任务进度: `${selectedTaskForExport.progressDone}/${selectedTaskForExport.progressTotal}`,
     }
-    return Array.from(map.values())
-  }, [])
 
-  const filteredForExport = useMemo(() => {
-    return dedupedRecords.filter((rec) => {
-      if (selectedRiskLevels.length > 0) {
-        if (!rec.riskLevel || !selectedRiskLevels.includes(rec.riskLevel)) return false
-      }
-      if (errorCodeQuery.trim()) {
-        if (!rec.errorCode.toLowerCase().includes(errorCodeQuery.trim().toLowerCase())) return false
-      }
-      if (annotatorQuery.trim()) {
-        if (!rec.annotator.includes(annotatorQuery.trim())) return false
-      }
-      if (dateFrom) {
-        if (rec.annotatedAt < dateFrom) return false
-      }
-      if (dateTo) {
-        if (rec.annotatedAt > dateTo) return false
-      }
-      return true
-    })
-  }, [dedupedRecords, selectedRiskLevels, errorCodeQuery, annotatorQuery, dateFrom, dateTo])
+    const sheet = XLSX.utils.json_to_sheet([row])
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, '任务导出')
 
-  const handleConfirmExport = () => {
-    // ---------------- 子需求 6：导出文件包含合格率统计汇总 ----------------
-    const total = filteredForExport.length
-    const levelCounts: Record<string, number> = {}
-    RISK_LEVELS.forEach((lv) => (levelCounts[lv] = 0))
-    let unqualifiedCount = 0
-    filteredForExport.forEach((rec) => {
-      if (rec.riskLevel) {
-        levelCounts[rec.riskLevel] = (levelCounts[rec.riskLevel] || 0) + 1
-        if (rec.riskLevel === '高风险错误' || rec.riskLevel === '极高风险错误') unqualifiedCount++
-      }
-    })
-    const qualifiedCount = total - unqualifiedCount
-    const qualifiedRate = total > 0 ? ((qualifiedCount / total) * 100).toFixed(1) : '0.0'
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(
+      now.getHours()
+    ).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+    const filename = `任务导出_${selectedTaskForExport.id}_${stamp}.xlsx`
 
-    const wb = XLSX.utils.book_new()
-
-    // Sheet1: 统计汇总
-    const summaryRows: (string | number)[][] = [
-      ['标注结果统计汇总'],
-      [],
-      ['总标注数', total],
-      ['合格数', qualifiedCount],
-      ['不合格数', unqualifiedCount],
-      ['合格率', `${qualifiedRate}%`],
-      [],
-      ['风险等级分布', '数量', '占比'],
-      ...RISK_LEVELS.map((lv) => [lv, levelCounts[lv] || 0, total > 0 ? `${(((levelCounts[lv] || 0) / total) * 100).toFixed(1)}%` : '0.0%']),
-    ]
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows)
-    XLSX.utils.book_append_sheet(wb, summarySheet, '统计汇总')
-
-    // Sheet2: 原始标注数据（筛选+去重后）
-    const dataRows = [
-      ['任务ID', '数据ID', '问题内容', '风险等级', '错误码', '标注人', '标注时间'],
-      ...filteredForExport.map((rec) => [
-        rec.taskId,
-        rec.recordId,
-        rec.question,
-        rec.riskLevel ?? '未标注',
-        rec.errorCode,
-        rec.annotator,
-        rec.annotatedAt,
-      ]),
-    ]
-    const dataSheet = XLSX.utils.aoa_to_sheet(dataRows)
-    XLSX.utils.book_append_sheet(wb, dataSheet, '标注结果明细')
-
-    XLSX.writeFile(wb, `标注结果导出_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(workbook, filename)
     setExportOpen(false)
+    window.alert(`导出成功：${filename}`)
   }
 
   return (
     <OnlineLayout>
-      <div className="flex h-full">
-        {/* 主内容 */}
-        <div className="flex-1 overflow-auto p-4">
-          <div className="flex items-center justify-between mb-4">
+      <div className="h-full overflow-auto p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
             <h1 className="text-base font-semibold text-gray-900">人工质检任务</h1>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setExportOpen(true)}>
-                <Download className="w-3.5 h-3.5 mr-1" />
-                导出标注结果
-              </Button>
-              <span className="text-xs text-gray-400 flex items-center gap-1">
-                触发器列表 <ChevronDown className="w-3 h-3" />
-              </span>
-            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              当前范围：{currentProject?.name ?? '--'} / {currentChannel?.name ?? '--'}
+            </p>
           </div>
-
-          <div className="flex items-center justify-end gap-2 mb-3">
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="h-8 w-24 text-xs">
+          <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-7 w-24 text-xs">
                 <SelectValue placeholder="全部" />
               </SelectTrigger>
               <SelectContent>
@@ -272,162 +287,162 @@ export default function OnlineTaskList() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索任务名称"
-                className="h-8 pl-8 text-xs w-48"
+                className="h-7 pl-8 text-xs w-44"
               />
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {mockTasks.map((task) => (
-              <div
-                key={task.id}
-                className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
+        <div className="mb-3 flex items-center gap-2">
+          {pageMode === 'task' ? (
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setPageMode('trigger')}>
+              触发器列表
+            </Button>
+          ) : (
+            <>
+              <TaskCreationDialog
+                open={showCreateDialog}
+                onOpenChange={setShowCreateDialog}
+                onTaskCreated={(task) => {
+                  console.log('人工任务创建成功：', task)
+                  setShowCreateDialog(false)
+                }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-semibold">
-                      i
+                <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 px-3">
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  创建任务
+                </Button>
+              </TaskCreationDialog>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setPageMode('task')}>
+                任务列表
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {pageMode === 'task'
+            ? filteredTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="bg-white rounded border border-gray-200 px-3 py-2.5 hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-4 h-4 rounded-full bg-gray-700 text-white text-[10px] flex items-center justify-center">
+                        i
+                      </div>
+                      <span className="text-[13px] font-semibold text-gray-900 truncate">{task.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 rounded-sm ${statusStyle[task.status]}`}
+                      >
+                        {task.status}
+                      </Badge>
                     </div>
-                    <span className="text-sm font-medium text-gray-900">{task.name}</span>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`text-[11px] px-2 py-0.5 rounded-full ${statusStyle[task.status]}`}
-                  >
-                    {task.status}
-                  </Badge>
-                </div>
 
-                <div className="text-[11px] text-gray-400 space-y-1 mb-3">
-                  <div>
-                    源自: {task.sourceScene} · {task.sourceEvent} · 渠道: {task.channel} · 简介: -
+                  <div className="text-[10px] text-gray-400 leading-4 mb-2.5">
+                    <div>源自: {task.sourceScene} / {task.sourceEvent} / {task.channel} / 简介：-</div>
+                    <div>创建时间: {task.createdAt}</div>
+                    <div>任务进度: {task.progressDone}/{task.progressTotal}</div>
                   </div>
-                  <div>创建时间: {task.createdAt}</div>
-                </div>
 
-                <div className="mb-3">
-                  <div className="flex items-center justify-between text-[11px] text-gray-400 mb-1">
-                    <span>任务进度:</span>
-                    <span>
-                      {task.progressDone}/{task.progressTotal}条
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-500 rounded-full"
-                      style={{
-                        width: `${
-                          task.progressTotal > 0
-                            ? Math.max(2, (task.progressDone / task.progressTotal) * 100)
-                            : 0
-                        }%`,
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-5.5 text-[10px] px-2 bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+                      onClick={() => navigate(`/online-annotation-workbench/${task.id}`)}
+                    >
+                      进入任务
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5.5 text-[10px] px-1.5 text-gray-600"
+                      onClick={() => {
+                        setSelectedTaskForExport(task)
+                        setExportOpen(true)
                       }}
-                    />
+                    >
+                      下载
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-5.5 text-[10px] px-1 text-gray-600">
+                      更多
+                    </Button>
+                    <MoreHorizontal className="w-3.5 h-3.5 text-gray-400 ml-auto" />
                   </div>
                 </div>
+              ))
+            : filteredTriggers.map((trigger) => (
+                <div
+                  key={trigger.id}
+                  className="bg-white rounded border border-gray-200 px-3 py-2.5 hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-4 h-4 rounded-full bg-gray-700 text-white text-[10px] flex items-center justify-center">
+                        i
+                      </div>
+                      <span className="text-[13px] font-semibold text-gray-900 truncate">{trigger.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 rounded-sm ${triggerStatusStyle[trigger.status]}`}
+                      >
+                        {trigger.status}
+                      </Badge>
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 px-3"
-                    onClick={() => navigate(`/online-annotation-workbench/${task.id}`)}
-                  >
-                    进入任务
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-7 text-xs px-3">
-                    下载
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2 ml-auto">
-                    更多
-                    <MoreHorizontal className="w-3.5 h-3.5 ml-0.5" />
-                  </Button>
+                  <div className="text-[10px] text-gray-400 leading-4 mb-2.5">
+                    <div>源自: {trigger.sourceScene} / {trigger.sourceEvent} / {trigger.channel} / 简介：-</div>
+                    <div>最新触发时间: {trigger.latestRunAt}</div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="h-5.5 text-[10px] px-2">
+                      触发配置
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-5.5 text-[10px] px-1.5 text-gray-600">
+                      关闭
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-5.5 text-[10px] px-1 text-gray-600">
+                      更多
+                    </Button>
+                    <MoreHorizontal className="w-3.5 h-3.5 text-gray-400 ml-auto" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+        </div>
 
-          <div className="flex items-center justify-end gap-3 mt-4 text-xs text-gray-400">
-            <span>共 4 条</span>
-            <div className="flex items-center gap-1">
-              <button className="w-6 h-6 flex items-center justify-center rounded bg-blue-600 text-white">
-                1
-              </button>
-            </div>
-            <span className="flex items-center gap-1">
-              21 条/页 <ChevronDown className="w-3 h-3" />
-            </span>
-          </div>
+        <div className="flex items-center justify-end gap-3 mt-4 text-xs text-gray-400">
+          <span>共 {pageMode === 'task' ? filteredTasks.length : filteredTriggers.length} 条</span>
+          <button className="w-5 h-5 flex items-center justify-center rounded border border-blue-500 text-blue-600">1</button>
+          <span className="flex items-center gap-1">
+            21 条/页
+            <ChevronDown className="w-3 h-3" />
+          </span>
         </div>
       </div>
 
-      {/* ---------------- 子需求 12：导出筛选弹窗 ---------------- */}
-      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>导出标注结果</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <div className="text-xs text-gray-500 mb-1.5">风险等级</div>
-              <div className="flex flex-wrap gap-3">
-                {RISK_LEVELS.map((level) => (
-                  <label key={level} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={selectedRiskLevels.includes(level)}
-                      onCheckedChange={() => toggleRiskLevel(level)}
-                    />
-                    {level}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-xs text-gray-500 mb-1.5">错误码</div>
-                <Input
-                  value={errorCodeQuery}
-                  onChange={(e) => setErrorCodeQuery(e.target.value)}
-                  placeholder="支持多选搜索，如 #0101"
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1.5">标注人</div>
-                <Input
-                  value={annotatorQuery}
-                  onChange={(e) => setAnnotatorQuery(e.target.value)}
-                  placeholder="支持多选搜索，如 张三"
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1.5">标注时间</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-8 text-xs"
-                />
-                <span className="text-gray-400">—</span>
-                <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-xs" />
-              </div>
-            </div>
-            <div className="bg-blue-50 rounded-md px-3 py-2 text-xs text-blue-600">
-              预计导出 {filteredForExport.length} 条（去重后，原始 {MOCK_ANNOTATION_RECORDS.length} 条）
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setExportOpen(false)}>
-              取消
-            </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={handleConfirmExport}>
-              导出 .xlsx
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExportResultDialog
+        open={exportOpen}
+        onOpenChange={(open) => {
+          setExportOpen(open)
+          if (!open) setSelectedTaskForExport(null)
+        }}
+        riskLevels={exportRiskLevels}
+        onRiskLevelsChange={setExportRiskLevels}
+        errorCodeKeyword={exportErrorCodeKeyword}
+        onErrorCodeKeywordChange={setExportErrorCodeKeyword}
+        annotatorOptions={exportAnnotatorOptions}
+        selectedAnnotators={exportAnnotators}
+        onSelectedAnnotatorsChange={setExportAnnotators}
+        dedupCount={selectedTaskForExport ? 1 : 0}
+        rawCount={selectedTaskForExport ? 1 : 0}
+        onConfirm={handleTaskExport}
+        confirmDisabled={!selectedTaskForExport}
+      />
     </OnlineLayout>
   )
 }

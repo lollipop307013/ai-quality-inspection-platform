@@ -1,16 +1,21 @@
-import { ReactNode, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
+  Bot,
+  BookOpenText,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
-  ChevronUp,
-  Check,
+  CircleDashed,
+  Compass,
+  Database,
+  Flag,
+  LayoutGrid,
+  ScanSearch,
   Sparkles,
-  BookOpen,
-  ClipboardCheck,
-  BarChart3,
   Wrench,
   Settings,
+  Check,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -22,88 +27,84 @@ interface OnlineLayoutProps {
   showGlobalSwitch?: boolean
 }
 
-// -------------------------------------------------------------------------
-// 最左侧：整体平台模块图标栏（AI应用/知识库/质检优化/数据中心/运营工具/系统管理）
-// -------------------------------------------------------------------------
-const PLATFORM_MODULES = [
-  { key: 'ai', icon: Sparkles, label: 'AI 应用' },
-  { key: 'kb', icon: BookOpen, label: '知识库' },
-  { key: 'quality', icon: ClipboardCheck, label: '质检优化' },
-  { key: 'data', icon: BarChart3, label: '数据中心' },
-  { key: 'ops', icon: Wrench, label: '运营工具' },
-  { key: 'sys', icon: Settings, label: '系统管理' },
-]
-
-function PlatformModuleRail() {
+function SecondaryNavLink({
+  to,
+  label,
+  active,
+}: {
+  to: string
+  label: string
+  active: boolean
+}) {
   return (
-    <aside className="w-16 bg-white border-r border-gray-200 flex flex-col items-center shrink-0 py-3">
-      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 mb-3 shrink-0" />
-      <nav className="flex-1 flex flex-col items-center gap-1 w-full">
-        {PLATFORM_MODULES.map((m) => {
-          const active = m.key === 'quality'
-          const Icon = m.icon
-          return (
-            <button
-              key={m.key}
-              className={`w-14 flex flex-col items-center gap-1 py-2 rounded-md transition-colors ${
-                active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 flex items-center justify-center rounded-lg ${
-                  active ? 'bg-blue-50' : ''
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-              </div>
-              <span className="text-[10px] leading-none">{m.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-    </aside>
+    <Link
+      to={to}
+      className={`block h-10 rounded-xl px-4 leading-10 text-[28px] tracking-[0.3px] transition-colors ${
+        active
+          ? 'bg-[#f5f8ff] text-[#111827] font-semibold'
+          : 'text-[#1f2937] hover:bg-[#f7f8fa]'
+      }`}
+      style={{ fontSize: '28px', transform: 'scale(0.5)', transformOrigin: 'left center', width: '200%' }}
+    >
+      {label}
+    </Link>
   )
 }
 
-// -------------------------------------------------------------------------
-// 右侧：当前模块（质检优化）的功能菜单，渠道选择放在此栏顶部
-// -------------------------------------------------------------------------
-function ChannelSelector() {
-  const [open, setOpen] = useState(false)
-  const {
-    projects,
-    currentProjectId,
-    currentChannelId,
-    setProject,
-    setChannel,
-  } = useOnlineChannelStore()
+function PrimaryNavItem({
+  icon,
+  label,
+  active,
+}: {
+  icon: ReactNode
+  label: string
+  active?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      className="w-full flex flex-col items-center gap-1.5 py-2 rounded-xl transition-colors hover:bg-[#edf1f5]"
+      title={label}
+    >
+      <span
+        className={`w-8 h-8 rounded-lg border flex items-center justify-center ${
+          active ? 'bg-white border-[#dbe3ff] text-[#4f6bff]' : 'bg-white border-[#e8edf3] text-[#3f4a59]'
+        }`}
+      >
+        {icon}
+      </span>
+      <span className={`text-[12px] ${active ? 'text-[#111827] font-medium' : 'text-[#374151]'}`}>{label}</span>
+    </button>
+  )
+}
 
+function ProjectSelector() {
+  const [open, setOpen] = useState(false)
+  const { projects, currentProjectId, setProject } = useOnlineChannelStore()
   const currentProject = projects.find((p) => p.id === currentProjectId)
-  const currentChannel = currentProject?.channels.find((c) => c.id === currentChannelId)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors min-w-0">
-          <span className="truncate max-w-[140px]" title={currentProject?.name}>
-            {currentProject?.name}
+        <button className="w-full flex items-center justify-between px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-xs hover:border-blue-300 transition-colors">
+          <span className="truncate text-gray-900" title={currentProject?.name}>
+            {currentProject?.name ?? '选择项目'}
           </span>
-          <span className="text-gray-300">/</span>
-          <span className="text-gray-900 font-medium shrink-0">{currentChannel?.name}</span>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <ChevronDown className="w-3.5 h-3.5 text-blue-500 shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2" align="start">
         <div className="text-[11px] text-gray-400 px-1 pb-1">选择项目</div>
-        <div className="space-y-0.5 mb-2 max-h-32 overflow-y-auto">
+        <div className="space-y-0.5 max-h-40 overflow-y-auto">
           {projects.map((project) => (
             <button
               key={project.id}
-              onClick={() => setProject(project.id)}
+              onClick={() => {
+                setProject(project.id)
+                setOpen(false)
+              }}
               className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors ${
-                project.id === currentProjectId
-                  ? 'bg-blue-50 text-blue-600 font-medium'
-                  : 'text-gray-600 hover:bg-gray-50'
+                project.id === currentProjectId ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
               <span className="truncate">{project.name}</span>
@@ -111,11 +112,33 @@ function ChannelSelector() {
             </button>
           ))}
         </div>
-        <div className="border-t border-gray-100 pt-2">
-          <div className="text-[11px] text-gray-400 px-1 pb-1">
-            选择渠道 <span className="text-gray-300">(来自 gbot，实时同步)</span>
-          </div>
-          <div className="space-y-0.5">
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function ChannelSelector() {
+  const [open, setOpen] = useState(false)
+  const { projects, currentProjectId, currentChannelId, setChannel } = useOnlineChannelStore()
+
+  const currentProject = projects.find((p) => p.id === currentProjectId)
+  const currentChannel = currentProject?.channels.find((c) => c.id === currentChannelId)
+
+  return (
+    <div className="px-2 pb-2">
+      <div className="text-[11px] text-[#9ca3af] px-1 mb-1">当前渠道</div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-[#dbe7ff] bg-[#f5f8ff] text-xs hover:border-[#c9d9ff] transition-colors">
+            <span className="truncate text-[#111827]" title={currentChannel?.name}>
+              {currentChannel?.name ?? '选择渠道'}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-[#5b7cff] shrink-0" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2" align="start">
+          <div className="text-[11px] text-gray-400 px-1 pb-1">选择渠道</div>
+          <div className="space-y-0.5 max-h-48 overflow-y-auto">
             {currentProject?.channels.map((channel) => (
               <button
                 key={channel.id}
@@ -124,57 +147,16 @@ function ChannelSelector() {
                   setOpen(false)
                 }}
                 className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors ${
-                  channel.id === currentChannelId
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
+                  channel.id === currentChannelId ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                <span>{channel.name}</span>
+                <span className="truncate">{channel.name}</span>
                 {channel.id === currentChannelId && <Check className="w-3.5 h-3.5 shrink-0" />}
               </button>
             ))}
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function SidebarLink({ to, label, active }: { to: string; label: string; active: boolean }) {
-  return (
-    <Link
-      to={to}
-      className={`block px-3 py-2 text-sm rounded-md transition-colors ${
-        active
-          ? 'bg-blue-50 text-blue-600 font-medium'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-      }`}
-    >
-      {label}
-    </Link>
-  )
-}
-
-function CollapsibleGroup({
-  label,
-  defaultOpen,
-  children,
-}: {
-  label: string
-  defaultOpen?: boolean
-  children?: ReactNode
-}) {
-  const [open, setOpen] = useState(!!defaultOpen)
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-      >
-        <span>{label}</span>
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-      </button>
-      {open && <div className="space-y-0.5">{children}</div>}
+        </PopoverContent>
+      </Popover>
     </div>
   )
 }
@@ -182,53 +164,125 @@ function CollapsibleGroup({
 export default function OnlineLayout({ children, subHeader, showGlobalSwitch }: OnlineLayoutProps) {
   const location = useLocation()
   const [globalSwitchOn, setGlobalSwitchOn] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const refreshChannels = useOnlineChannelStore((state) => state.refreshChannels)
   const path = location.pathname
 
-  return (
-    <div className="flex h-screen bg-gray-50 text-sm overflow-hidden">
-      {/* 最左侧：整体平台模块图标栏 */}
-      <PlatformModuleRail />
+  useEffect(() => {
+    void refreshChannels()
+  }, [refreshChannels])
 
-      {/* 右侧：当前模块(质检优化)功能菜单 */}
-      <aside className="w-52 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="h-14 flex items-center px-4 border-b border-gray-100 gap-2 min-w-0">
-          <span className="text-base font-bold text-gray-900 shrink-0">质检优化</span>
-          <span className="text-gray-200 shrink-0">|</span>
-          <ChannelSelector />
+  const qualityActive =
+    path === '/online-quality-analysis' ||
+    path === '/online-quality-standards' ||
+    path === '/online-task-list' ||
+    path.startsWith('/online-annotation-workbench') ||
+    path === '/online-optimization'
+
+  return (
+    <div className="flex h-screen bg-[#f7f8fa] text-sm overflow-hidden">
+      <aside className="h-full bg-white border-r border-[#e9edf2] flex shrink-0">
+        <div className="w-[78px] bg-[#f5f7fa] border-r border-[#edf0f3] flex flex-col items-center py-3">
+          <div className="w-9 h-9 rounded-xl bg-white border border-[#e7ebf2] shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex items-center justify-center text-[#5b7cff] mb-4">
+            <Sparkles className="w-4 h-4" />
+          </div>
+
+          <div className="w-full px-2 space-y-2">
+            <PrimaryNavItem icon={<Bot className="w-4 h-4" />} label="AI 应用" />
+            <PrimaryNavItem icon={<BookOpenText className="w-4 h-4" />} label="知识库" />
+            <PrimaryNavItem icon={<Flag className="w-4 h-4" />} label="质检优化" active={qualityActive} />
+            <PrimaryNavItem icon={<Database className="w-4 h-4" />} label="数据中心" />
+            <PrimaryNavItem icon={<Wrench className="w-4 h-4" />} label="运营工具" />
+            <PrimaryNavItem icon={<Settings className="w-4 h-4" />} label="系统管理" />
+          </div>
+
+          <div className="mt-auto">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((prev) => !prev)}
+              className="w-9 h-9 rounded-full bg-white border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[#4b5563] hover:bg-[#f9fafb] flex items-center justify-center"
+              title={sidebarCollapsed ? '展开导航' : '收起导航'}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
-        <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
-          <CollapsibleGroup label="质检中心" defaultOpen>
-            <SidebarLink to="/online-quality-analysis" label="质检分析" active={path === '/online-quality-analysis'} />
-            <SidebarLink to="/online-quality-standards" label="质检标准配置" active={path === '/online-quality-standards'} />
-            <SidebarLink
-              to="/online-task-list"
-              label="人工质检任务"
-              active={path === '/online-task-list' || path.startsWith('/online-annotation-workbench')}
-            />
-            <SidebarLink to="/online-optimization" label="优化操作台" active={path === '/online-optimization'} />
-          </CollapsibleGroup>
-          <CollapsibleGroup label="数据洞察" />
-          <CollapsibleGroup label="运营工具" />
-          <CollapsibleGroup label="系统管理" />
-        </nav>
+
+        {!sidebarCollapsed && (
+          <div className="w-[236px] bg-white flex flex-col">
+            <div className="h-16 px-5 flex items-center justify-between border-b border-[#f0f2f5]">
+              <span className="text-[34px] font-semibold text-[#111827]" style={{ fontSize: '34px', transform: 'scale(0.5)', transformOrigin: 'left center', width: '200%' }}>
+                质检优化
+              </span>
+            </div>
+
+            <nav className="px-4 py-4 space-y-2 overflow-y-auto">
+              <ChannelSelector />
+
+              <div className="flex items-center justify-between h-9 px-3 text-[#1f2937]">
+                <span className="inline-flex items-center gap-2 text-sm">
+                  <LayoutGrid className="w-4 h-4 text-[#9aa3af]" />
+                  <span className="text-[13px]">质检中心</span>
+                </span>
+                <ChevronDown className="w-4 h-4 text-[#6b7280]" />
+              </div>
+
+              <div className="space-y-1">
+                <SecondaryNavLink to="/online-quality-analysis" label="质检分析" active={path === '/online-quality-analysis'} />
+                <SecondaryNavLink to="/online-quality-standards" label="质检标准配置" active={path === '/online-quality-standards'} />
+                <SecondaryNavLink
+                  to="/online-task-list"
+                  label="人工质检任务"
+                  active={path === '/online-task-list' || path.startsWith('/online-annotation-workbench')}
+                />
+                <SecondaryNavLink to="/online-optimization" label="优化操作台" active={path === '/online-optimization'} />
+              </div>
+
+              <div className="flex items-center justify-between h-9 px-3 mt-3 text-[#1f2937] rounded-lg hover:bg-[#f7f8fa] cursor-pointer">
+                <span className="inline-flex items-center gap-2 text-[13px]">
+                  <ScanSearch className="w-4 h-4 text-[#9aa3af]" />
+                  溯源调优
+                </span>
+                <ChevronRight className="w-4 h-4 text-[#6b7280]" />
+              </div>
+
+              <div className="flex items-center justify-between h-9 px-3 text-[#1f2937] rounded-lg hover:bg-[#f7f8fa] cursor-pointer">
+                <span className="inline-flex items-center gap-2 text-[13px]">
+                  <Compass className="w-4 h-4 text-[#9aa3af]" />
+                  质量洞察
+                </span>
+                <ChevronRight className="w-4 h-4 text-[#6b7280]" />
+              </div>
+
+              <div className="flex items-center justify-between h-9 px-3 text-[#1f2937] rounded-lg hover:bg-[#f7f8fa] cursor-pointer">
+                <span className="inline-flex items-center gap-2 text-[13px]">
+                  <CircleDashed className="w-4 h-4 text-[#9aa3af]" />
+                  工具能力
+                </span>
+                <ChevronRight className="w-4 h-4 text-[#6b7280]" />
+              </div>
+            </nav>
+          </div>
+        )}
       </aside>
 
-      {/* 主体内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶部导航栏：仅保留全局开关 + 用户信息 */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-end px-4 shrink-0 gap-5">
-          {showGlobalSwitch && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>全局质检开关（高危词汇自动检测标准生效）</span>
-              <Switch checked={globalSwitchOn} onCheckedChange={setGlobalSwitchOn} />
+        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
+          <div className="w-64 max-w-full">
+            <ProjectSelector />
+          </div>
+          <div className="flex items-center gap-5">
+            {showGlobalSwitch && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>全局质检开关（高危词汇自动检测标准生效）</span>
+                <Switch checked={globalSwitchOn} onCheckedChange={setGlobalSwitchOn} />
+              </div>
+            )}
+            <div className="flex items-center gap-2 cursor-pointer">
+              <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-medium">y</div>
+              <span className="text-gray-700">yzhinan</span>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </div>
-          )}
-          <div className="flex items-center gap-2 cursor-pointer">
-            <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-medium">
-              y
-            </div>
-            <span className="text-gray-700">yzhinan</span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
           </div>
         </header>
 
