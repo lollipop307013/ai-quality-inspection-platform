@@ -209,6 +209,18 @@ const RISK_BADGE = (level: RiskLevel | null) => {
   )
 }
 
+function getRiskBorderColor(level: RiskLevel | null) {
+  if (!level) return 'border-transparent'
+  const map: Record<RiskLevel, string> = {
+    无风险: 'border-slate-300',
+    低风险错误: 'border-green-400',
+    中风险错误: 'border-yellow-400',
+    高风险错误: 'border-orange-400',
+    极高风险错误: 'border-red-400',
+  }
+  return map[level]
+}
+
 function replaceArabicPunctuation(raw: string) {
   return raw
     .replace(/\?/g, '؟')
@@ -801,7 +813,7 @@ export default function OnlineAnnotationWorkbench() {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className={`${leftCollapsed ? 'w-16' : 'w-72'} bg-white border-r border-gray-200 flex flex-col shrink-0 transition-all`}>
+          <div className={`${leftCollapsed ? 'w-10' : 'w-72'} bg-white border-r border-gray-200 flex flex-col shrink-0 transition-all`}>
             <div className="p-2 border-b border-gray-100 flex items-center gap-1 text-xs">
               {!leftCollapsed &&
                 (
@@ -860,38 +872,45 @@ export default function OnlineAnnotationWorkbench() {
                   {!leftCollapsed && '未找到匹配问题'}
                 </div>
               ) : (
-                searchedRecords.map((record) => (
-                  <button
-                    key={record.id}
-                    onClick={() => jumpToRecord(record.id)}
-                    className={`w-full text-left ${leftCollapsed ? 'px-1.5 py-2' : 'px-3 py-2'} border-b border-gray-50 transition-colors ${
-                      selectedId === record.id ? 'bg-blue-50' : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    {leftCollapsed ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-[10px] text-gray-500">{record.id}</span>
-                        <span className="scale-90">{RISK_BADGE(record.riskLevel)}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className={`flex items-center justify-between gap-2 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
-                          <div
-                            className={`text-[11px] truncate ${selectedId === record.id ? 'text-blue-600 font-medium' : 'text-gray-700'} ${
-                              language === 'ar' ? 'text-right' : ''
-                            }`}
-                          >
-                            {formatTimeByLanguage(record.time, language)}
+                searchedRecords.map((record) => {
+                  const serial = recordsWithDraft.findIndex((r) => r.id === record.id) + 1
+                  const riskBorderColor = getRiskBorderColor(record.riskLevel)
+                  return (
+                    <button
+                      key={record.id}
+                      onClick={() => jumpToRecord(record.id)}
+                      className={`group text-left transition-colors ${
+                        selectedId === record.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                      } ${leftCollapsed ? `border-l-2 ${riskBorderColor} w-full aspect-square flex items-center justify-center` : 'w-full border-b border-gray-50 px-3 py-2'}`}
+                    >
+                      {leftCollapsed ? (
+                        <span
+                          className={`text-[11px] font-medium ${
+                            selectedId === record.id ? 'text-blue-600' : 'text-gray-600'
+                          }`}
+                        >
+                          {serial}
+                        </span>
+                      ) : (
+                        <>
+                          <div className={`flex items-center justify-between gap-2 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+                            <div
+                              className={`text-[11px] truncate ${selectedId === record.id ? 'text-blue-600 font-medium' : 'text-gray-700'} ${
+                                language === 'ar' ? 'text-right' : ''
+                              }`}
+                            >
+                              {formatTimeByLanguage(record.time, language)}
+                            </div>
+                            {RISK_BADGE(record.riskLevel)}
                           </div>
-                          {RISK_BADGE(record.riskLevel)}
-                        </div>
-                        <div className={`text-[11px] text-gray-400 truncate mt-0.5 ${language === 'ar' ? 'text-right' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                          {language === 'ar' ? record.summaryAr : record.summaryZh}
-                        </div>
-                      </>
-                    )}
-                  </button>
-                ))
+                          <div className={`text-[11px] text-gray-400 truncate mt-0.5 ${language === 'ar' ? 'text-right' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                            {language === 'ar' ? record.summaryAr : record.summaryZh}
+                          </div>
+                        </>
+                      )}
+                    </button>
+                  )
+                })
               )}
             </div>
 
