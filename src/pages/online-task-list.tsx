@@ -442,6 +442,8 @@ export default function OnlineTaskList() {
         rawCount={selectedTaskForExport ? 1 : 0}
         onConfirm={handleTaskExport}
         confirmDisabled={!selectedTaskForExport}
+        title="导出任务信息"
+        showFilters={false}
       />
     </OnlineLayout>
   )

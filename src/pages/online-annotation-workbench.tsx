@@ -15,7 +15,7 @@ import {
 import ExportResultDialog from '@/components/export-result-dialog'
 
 import { ChevronLeft, ChevronRight, Search, X, PanelLeftClose, PanelLeftOpen, FileDown } from 'lucide-react'
-import { RiskLevel, RISK_LEVEL_STYLE } from '@/store/onlineStore'
+import { RiskLevel, RISK_LEVEL_STYLE, RISK_LEVELS } from '@/store/onlineStore'
 import { DEFAULT_QUALITY_STANDARD_ROWS } from '@/data/quality-standards'
 
 interface RecordItem {
@@ -53,7 +53,7 @@ interface InlineComment {
 
 interface RecordAnnotationDraft {
   errorCodes: string[]
-  riskLevel: RiskLevel | null
+  manualRiskLevel: RiskLevel | null
   optimizationStrategy: string
   remark: string
 }
@@ -321,6 +321,7 @@ export default function OnlineAnnotationWorkbench() {
   const [errorCodeTags, setErrorCodeTags] = useState<string[]>([])
   const [optimizationStrategy, setOptimizationStrategy] = useState('')
   const [remark, setRemark] = useState('')
+  const [manualRiskLevel, setManualRiskLevel] = useState<RiskLevel | null>(null)
   const [showErrorCodeSuggestions, setShowErrorCodeSuggestions] = useState(false)
   const [annotationDraftById, setAnnotationDraftById] = useState<Record<number, RecordAnnotationDraft>>({})
   const [language, setLanguage] = useState<'zh' | 'ar'>('zh')
@@ -346,10 +347,12 @@ export default function OnlineAnnotationWorkbench() {
       orderedRecords.map((record) => {
         const draft = annotationDraftById[record.id]
         if (!draft) return record
+
+        const riskLevelFromCodes = computeRiskLevelByCodes(draft.errorCodes)
         return {
           ...record,
           errorCode: draft.errorCodes.join('、'),
-          riskLevel: draft.riskLevel,
+          riskLevel: draft.manualRiskLevel ?? riskLevelFromCodes,
         }
       }),
     [orderedRecords, annotationDraftById]
@@ -360,14 +363,16 @@ export default function OnlineAnnotationWorkbench() {
   const highlights = highlightsByRecordId[selectedRecord.id] ?? []
   const inlineComments = inlineCommentsByRecordId[selectedRecord.id] ?? []
 
-  const commitCurrentDraft = () => {
+  const commitCurrentDraft = (options?: { autoMarkNoRiskOnEmpty?: boolean }) => {
     if (!selectedRecord) return
 
     const mergedErrorCodes = appendMatchedErrorCodeTag(errorCodeTags, errorCodeInput)
-    const riskLevel = computeRiskLevelByCodes(mergedErrorCodes)
     const hasExtraContent = optimizationStrategy.trim().length > 0 || remark.trim().length > 0
+    const computedRiskLevel = computeRiskLevelByCodes(mergedErrorCodes)
+    const shouldAutoMarkNoRisk = Boolean(options?.autoMarkNoRiskOnEmpty) && mergedErrorCodes.length === 0 && !manualRiskLevel
+    const nextManualRiskLevel = manualRiskLevel ?? (shouldAutoMarkNoRisk ? '无风险' : null)
 
-    if (!hasExtraContent && mergedErrorCodes.length === 0) {
+    if (!hasExtraContent && mergedErrorCodes.length === 0 && !nextManualRiskLevel) {
       setAnnotationDraftById((prev) => {
         const next = { ...prev }
         delete next[selectedRecord.id]
@@ -380,15 +385,19 @@ export default function OnlineAnnotationWorkbench() {
       ...prev,
       [selectedRecord.id]: {
         errorCodes: mergedErrorCodes,
-        riskLevel,
+        manualRiskLevel: nextManualRiskLevel,
         optimizationStrategy,
         remark,
       },
     }))
+
+    if (!manualRiskLevel && computedRiskLevel !== '无风险' && shouldAutoMarkNoRisk) {
+      setManualRiskLevel('无风险')
+    }
   }
 
-  const jumpToRecord = (targetId: number) => {
-    commitCurrentDraft()
+  const jumpToRecord = (targetId: number, options?: { autoMarkNoRiskOnEmpty?: boolean }) => {
+    commitCurrentDraft(options)
     setSelectedId(targetId)
   }
 
@@ -397,7 +406,9 @@ export default function OnlineAnnotationWorkbench() {
   }
 
   const goNext = () => {
-    if (selectedIndex < recordsWithDraft.length - 1) jumpToRecord(recordsWithDraft[selectedIndex + 1].id)
+    if (selectedIndex < recordsWithDraft.length - 1) {
+      jumpToRecord(recordsWithDraft[selectedIndex + 1].id, { autoMarkNoRiskOnEmpty: true })
+    }
   }
 
   useEffect(() => {
@@ -570,6 +581,7 @@ export default function OnlineAnnotationWorkbench() {
       setErrorCodeInput('')
       setOptimizationStrategy(draft.optimizationStrategy)
       setRemark(draft.remark)
+      setManualRiskLevel(draft.manualRiskLevel)
       return
     }
 
@@ -577,6 +589,7 @@ export default function OnlineAnnotationWorkbench() {
     setErrorCodeInput('')
     setOptimizationStrategy('')
     setRemark('')
+    setManualRiskLevel(null)
   }, [selectedRecord.id, annotationDraftById])
 
   const errorCodeSuggestions = useMemo(() => {
@@ -592,7 +605,8 @@ export default function OnlineAnnotationWorkbench() {
     if (errorCodeTags.includes(autoMatchedSuggestion.errorCode)) return errorCodeTags
     return [...errorCodeTags, autoMatchedSuggestion.errorCode]
   }, [errorCodeTags, autoMatchedSuggestion])
-  const livePanelRisk = computeRiskLevelByCodes(mergedPreviewCodes) ?? selectedRecord.riskLevel
+  const computedPreviewRisk = computeRiskLevelByCodes(mergedPreviewCodes)
+  const livePanelRisk = manualRiskLevel ?? computedPreviewRisk ?? selectedRecord.riskLevel
 
   const commitInputAsTag = () => {
     setErrorCodeTags((prev) => appendMatchedErrorCodeTag(prev, errorCodeInput))
@@ -1080,6 +1094,23 @@ export default function OnlineAnnotationWorkbench() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">风险等级</label>
+                <Select value={manualRiskLevel ?? '__AUTO__'} onValueChange={(value) => setManualRiskLevel(value === '__AUTO__' ? null : (value as RiskLevel))}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="自动按错误码推导" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__AUTO__">自动（按错误码推导）</SelectItem>
+                    {RISK_LEVELS.map((level) => (
+                      <SelectItem key={level} value={level}>
+                        {level}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
